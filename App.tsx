@@ -59,12 +59,29 @@ const App: React.FC = () => {
     const [isInvulnerable, setIsInvulnerable] = useState<boolean>(false);
     const [invulnerabilityTimeoutId, setInvulnerabilityTimeoutId] = useState<ReturnType<typeof setTimeout> | null>(null);
     const [isTouchDevice, setIsTouchDevice] = useState<boolean>(false);
+    const [isFullscreen, setIsFullscreen] = useState<boolean>(!!document.fullscreenElement);
 
     const { playSound, playMusic, stopMusic, isMuted, toggleMute } = useAudio();
 
     useEffect(() => {
         setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
     }, []);
+    
+    useEffect(() => {
+        const onFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
+        document.addEventListener('fullscreenchange', onFullscreenChange);
+        return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+    }, []);
+
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.error(`Error al intentar activar el modo de pantalla completa: ${err.message} (${err.name})`);
+            });
+        } else {
+            document.exitFullscreen();
+        }
+    };
 
     const isWall = (pos: Position) => {
         const wall = pos.x < 0 || pos.x >= BOARD_WIDTH || pos.y < 0 || pos.y >= BOARD_HEIGHT;
@@ -501,6 +518,9 @@ const App: React.FC = () => {
                     <div>Nivel: {level}</div>
                     <div>Comida: {FOOD_PER_LEVEL - foodItems.length}/{FOOD_PER_LEVEL}</div>
                     <div className="flex items-center space-x-4">
+                        <button onClick={toggleFullscreen} className="text-2xl hover:scale-110 transition-transform focus:outline-none" aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
+                            {isFullscreen ? '↘' : '⛶'}
+                        </button>
                         <button onClick={toggleMute} className="text-2xl hover:scale-110 transition-transform focus:outline-none" aria-label={isMuted ? 'Activar sonido' : 'Silenciar'}>
                             {isMuted ? '🔇' : '🔊'}
                         </button>
