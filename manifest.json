@@ -1,0 +1,29 @@
+{
+  "short_name": "Gato DC",
+  "name": "Gato en el Centro de Distribución",
+  "description": "Un divertido juego arcade en el que ayudas a un gato a esquivar a los trabajadores y las transpaletas para conseguir comida.",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512",
+      "purpose": "any"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "landscape-primary",
+  "theme_color": "#1F2937",
+  "background_color": "#111827"
+}

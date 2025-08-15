@@ -3,10 +3,13 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gato en el Centro de Distribución</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#1F2937" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
 <script type="importmap">
 {
   "imports": {
@@ -21,5 +24,16 @@
 <body class="bg-gray-800">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').then(registration => {
+            console.log('SW registrado con éxito:', registration);
+          }).catch(registrationError => {
+            console.log('Fallo en el registro del SW:', registrationError);
+          });
+        });
+      }
+    </script>
 </body>
 </html>
