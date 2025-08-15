@@ -1,6 +1,7 @@
+
 import { useCallback, useRef, useState, useEffect } from 'react';
 
-type SoundType = 'start' | 'collect' | 'hide' | 'capture' | 'levelComplete' | 'gameOver';
+type SoundType = 'start' | 'collect' | 'hide' | 'capture' | 'levelComplete' | 'gameOver' | 'respawn';
 
 // --- INSTRUCCIONES PARA MÚSICA PERSONALIZADA ---
 // 1. El enlace que proporcionaste de Suno es una página web, no un enlace directo a un archivo de audio.
@@ -141,6 +142,10 @@ export const useAudio = () => {
                 playNote(440, now, 0.2, 'square');
                 playNote(349, now + 0.25, 0.2, 'square');
                 playNote(261, now + 0.5, 0.4, 'square');
+                break;
+            case 'respawn':
+                playNote(659, now, 0.1, 'triangle', 0.4);
+                playNote(880, now + 0.15, 0.2, 'triangle', 0.4);
                 break;
         }
     }, [playNote]);

@@ -8,6 +8,35 @@ import { useAudio } from './hooks/useAudio';
 
 const arePositionsEqual = (pos1: Position, pos2: Position) => pos1.x === pos2.x && pos1.y === pos2.y;
 
+// --- Componente D-Pad para Móviles ---
+interface DPadProps {
+  onMove: (direction: Direction) => void;
+}
+
+const DPad: React.FC<DPadProps> = ({ onMove }) => {
+  const handleTouch = (e: React.TouchEvent, direction: Direction) => {
+    e.preventDefault(); // Evita el zoom o el desplazamiento de la página
+    onMove(direction);
+  };
+
+  const buttonClasses = "absolute bg-gray-600/70 rounded-full w-16 h-16 flex justify-center items-center text-3xl text-white active:bg-yellow-500/80 transform active:scale-110 transition-transform select-none";
+  const arrowClasses = "pointer-events-none";
+
+  return (
+    <div
+      className="fixed bottom-5 left-5 z-[100] w-48 h-48 select-none"
+      aria-label="Controles direccionales"
+      role="group"
+    >
+      <button onTouchStart={(e) => handleTouch(e, 'up')} className={buttonClasses} style={{ top: 0, left: '50%', transform: 'translateX(-50%)' }} aria-label="Mover hacia arriba"><span className={arrowClasses}>▲</span></button>
+      <button onTouchStart={(e) => handleTouch(e, 'down')} className={buttonClasses} style={{ bottom: 0, left: '50%', transform: 'translateX(-50%)' }} aria-label="Mover hacia abajo"><span className={arrowClasses}>▼</span></button>
+      <button onTouchStart={(e) => handleTouch(e, 'left')} className={buttonClasses} style={{ left: 0, top: '50%', transform: 'translateY(-50%)' }} aria-label="Mover hacia la izquierda"><span className={arrowClasses}>◀</span></button>
+      <button onTouchStart={(e) => handleTouch(e, 'right')} className={buttonClasses} style={{ right: 0, top: '50%', transform: 'translateY(-50%)' }} aria-label="Mover hacia la derecha"><span className={arrowClasses}>▶</span></button>
+    </div>
+  );
+};
+
+
 const App: React.FC = () => {
     const [gameState, setGameState] = useState<GameState>(GameState.NOT_STARTED);
     const [lives, setLives] = useState<number>(INITIAL_LIVES);
@@ -27,7 +56,15 @@ const App: React.FC = () => {
     const [isCaptureInProgress, setIsCaptureInProgress] = useState<boolean>(false);
     const [capturedPosition, setCapturedPosition] = useState<Position | null>(null);
 
+    const [isInvulnerable, setIsInvulnerable] = useState<boolean>(false);
+    const [invulnerabilityTimeoutId, setInvulnerabilityTimeoutId] = useState<ReturnType<typeof setTimeout> | null>(null);
+    const [isTouchDevice, setIsTouchDevice] = useState<boolean>(false);
+
     const { playSound, playMusic, stopMusic, isMuted, toggleMute } = useAudio();
+
+    useEffect(() => {
+        setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
+    }, []);
 
     const isWall = (pos: Position) => {
         const wall = pos.x < 0 || pos.x >= BOARD_WIDTH || pos.y < 0 || pos.y >= BOARD_HEIGHT;
@@ -124,6 +161,10 @@ const App: React.FC = () => {
         setHideTimeoutId(null);
         setIsCaptureInProgress(false);
 
+        setIsInvulnerable(false);
+        if (invulnerabilityTimeoutId) clearTimeout(invulnerabilityTimeoutId);
+        setInvulnerabilityTimeoutId(null);
+
         const occupiedByRacks = (pos: Position) => newRacks.some(r => arePositionsEqual(r, pos));
         let newPlayerPos = { x: 1, y: 1 };
         while(occupiedByRacks(newPlayerPos)){
@@ -175,7 +216,7 @@ const App: React.FC = () => {
         }
         setFoodItems(newFoodItems);
 
-    }, [exitPosition, generateRacks, getRandomPatrolTarget, hideTimeoutId, getEnemyOccupiedCells]);
+    }, [exitPosition, generateRacks, getRandomPatrolTarget, hideTimeoutId, getEnemyOccupiedCells, invulnerabilityTimeoutId]);
 
     const startGame = () => {
         setLives(INITIAL_LIVES);
@@ -355,7 +396,7 @@ const App: React.FC = () => {
             }
         }
         
-        if (!isHiding) {
+        if (!isHiding && !isInvulnerable) {
             const allEnemyCells = enemies.flatMap(getEnemyOccupiedCells);
             const collision = allEnemyCells.some(cell => arePositionsEqual(playerPosition, cell));
             if (collision) {
@@ -374,6 +415,16 @@ const App: React.FC = () => {
                         setHideTimeoutId(null);
                         setIsCaptureInProgress(false);
                         setCapturedPosition(null);
+
+                        // Start invulnerability
+                        setIsInvulnerable(true);
+                        playSound('respawn');
+                        if (invulnerabilityTimeoutId) clearTimeout(invulnerabilityTimeoutId);
+                        const timeout = setTimeout(() => {
+                            setIsInvulnerable(false);
+                            setInvulnerabilityTimeoutId(null);
+                        }, 5000); // 5 seconds
+                        setInvulnerabilityTimeoutId(timeout);
                     } else {
                         setGameState(GameState.GAME_OVER);
                         playSound('gameOver');
@@ -389,7 +440,7 @@ const App: React.FC = () => {
             stopMusic();
         }
 
-    }, [gameState, playerPosition, foodItems, enemies, lives, getNextStep, isHiding, allFoodCollected, exitPosition, lastKnownPlayerPosition, hideTimeoutId, racks, getRandomPatrolTarget, isCaptureInProgress, playSound, stopMusic, getEnemyOccupiedCells]);
+    }, [gameState, playerPosition, foodItems, enemies, lives, getNextStep, isHiding, allFoodCollected, exitPosition, lastKnownPlayerPosition, hideTimeoutId, racks, getRandomPatrolTarget, isCaptureInProgress, playSound, stopMusic, getEnemyOccupiedCells, isInvulnerable, invulnerabilityTimeoutId]);
 
     useEffect(() => {
         if (gameState === GameState.PLAYING) {
@@ -405,6 +456,7 @@ const App: React.FC = () => {
                     <Modal title="🐱 Gato en el Centro de Distribución" buttonText="¡Empezar a Jugar!" onButtonClick={startGame}>
                         <p>¡Ayuda al gato a conseguir <strong>{FOOD_PER_LEVEL} comidas</strong> y luego escapar!</p>
                         <p className="font-bold">⌨️ Usa las flechas para moverte.</p>
+                        <p>📱 En móvil, usa los controles en pantalla.</p>
                         <p>🧱 ¡Puedes <strong>esconderte</strong> en las estanterías por 2 segundos!</p>
                         <p>👷 Los operarios tienen su propia rutina. ¡No los molestes!</p>
                         <p className="flex items-center justify-center gap-2">
@@ -493,7 +545,7 @@ const App: React.FC = () => {
                         ))}
                         
                         {!isCaptureInProgress ? (
-                             <div className={`absolute transition-transform duration-200 ease-out flex justify-center items-center ${isHiding ? 'opacity-50' : 'opacity-100'}`} style={{ 
+                             <div className={`absolute transition-transform duration-200 ease-out flex justify-center items-center ${isHiding ? 'opacity-50' : 'opacity-100'} ${isInvulnerable ? 'animate-blink' : ''}`} style={{ 
                                 width: GRID_SIZE, 
                                 height: GRID_SIZE,
                                 transform: `translate(${playerPosition.x * GRID_SIZE}px, ${playerPosition.y * GRID_SIZE}px)`
@@ -518,7 +570,7 @@ const App: React.FC = () => {
                     )}
                 </div>
             </div>
-            
+            {isTouchDevice && gameState === GameState.PLAYING && <DPad onMove={handlePlayerMove} />}
             <footer className="mt-6 text-center text-gray-500 text-sm">
                 <p>Usa las teclas [↑ ↓ ← →] o [W A S D] para moverte.</p>
                 <p>Muévete a las estanterías 🧱 para esconderte por 2 segundos.</p>
@@ -555,6 +607,12 @@ const App: React.FC = () => {
                 }
                 .capture-animation-container {
                     animation: capture-move-and-fade 2s ease-in forwards;
+                }
+                 @keyframes blink-effect {
+                    50% { opacity: 0.3; }
+                }
+                .animate-blink {
+                    animation: blink-effect 0.4s step-end infinite;
                 }
             `}</style>
         </main>
