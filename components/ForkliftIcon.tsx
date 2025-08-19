@@ -1,6 +1,6 @@
 import React from 'react';
 
-const ForkliftIcon: React.FC<{ className?: string }> = ({ className }) => (
+const ForkliftIcon: React.FC<{ className?: string; color?: string }> = ({ className, color = '#FBBF24' }) => (
   <svg 
     xmlns="http://www.w3.org/2000/svg" 
     viewBox="0 0 64 56" // Adjusted for a less tall appearance
@@ -15,7 +15,7 @@ const ForkliftIcon: React.FC<{ className?: string }> = ({ className }) => (
     <rect x="18" y="20" width="4" height="4" rx="1" fill="#EF4444" />
 
     {/* Body and Cabin */}
-    <path fill="#FBBF24" d="M22 28h30l6 14h-36z" />
+    <path fill={color} d="M22 28h30l6 14h-36z" />
     <path fill="#1F2937" d="M25 28v-12c0-2.2 1.8-4 4-4h14c2.2 0 4 1.8 4 4v12z" />
     
     {/* Cabin Frame */}
