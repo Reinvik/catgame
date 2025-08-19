@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Position, Enemy, EnemyType, GameState, Direction, FoodItem, Rack, EnemyState } from './types';
+import { Position, Enemy, EnemyType, GameState, Direction, FoodItem, Rack, EnemyState, HighScoreEntry } from './types';
 import { BOARD_WIDTH, BOARD_HEIGHT, GRID_SIZE, INITIAL_LIVES, BASE_GAME_TICK, FOOD_PER_LEVEL, FOOD_EMOJIS, ENEMY_BASE_COUNT, HIDING_DURATION_MS, EXIT_EMOJI, WORKER_SPEED, PALLET_JACK_SPEED, WORKER_VISION_RANGE } from './constants';
 import Modal from './components/Modal';
 import ForkliftIcon from './components/ForkliftIcon';
@@ -45,7 +45,7 @@ const App: React.FC = () => {
     const [foodItems, setFoodItems] = useState<FoodItem[]>([]);
     const [enemies, setEnemies] = useState<Enemy[]>([]);
     const [racks, setRacks] = useState<Rack[]>([]);
-    const [exitPosition] = useState<Position>({ x: BOARD_WIDTH - 1, y: Math.floor(BOARD_HEIGHT / 2) });
+    const [exitPosition] = useState<Position>({ x: BOARD_WIDTH - 2, y: Math.floor(BOARD_HEIGHT / 2) - 1 });
     const [key, setKey] = useState(0);
 
     const [isHiding, setIsHiding] = useState<boolean>(false);
@@ -62,6 +62,31 @@ const App: React.FC = () => {
     const [isFullscreen, setIsFullscreen] = useState<boolean>(!!document.fullscreenElement);
 
     const { playSound, playMusic, stopMusic, isMuted, toggleMute } = useAudio();
+    
+    // --- Sistema de Puntuación Histórica ---
+    const [playerName, setPlayerName] = useState<string>('');
+    const [totalFood, setTotalFood] = useState(0);
+    const [leaderboard, setLeaderboard] = useState<HighScoreEntry[]>([]);
+
+
+    // Cargar puntuación al inicio
+    useEffect(() => {
+        try {
+            const savedScores = localStorage.getItem('leaderboard');
+            if (savedScores) {
+                const parsedScores = JSON.parse(savedScores) as HighScoreEntry[];
+                
+                parsedScores.sort((a, b) => {
+                    if (b.level !== a.level) return b.level - a.level;
+                    return b.food - a.food;
+                });
+
+                setLeaderboard(parsedScores.slice(0, 10));
+            }
+        } catch (error) {
+            console.error("Fallo al cargar la tabla de récords desde localStorage", error);
+        }
+    }, []);
 
     useEffect(() => {
         setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
@@ -91,8 +116,8 @@ const App: React.FC = () => {
     
     const getForkliftCellsAt = (position: Position): Position[] => {
         const cells: Position[] = [];
-        for (let i = 0; i < 3; i++) {
-            for (let j = 0; j < 3; j++) {
+        for (let i = 0; i < 2; i++) {
+            for (let j = 0; j < 2; j++) {
                 cells.push({ x: position.x + i, y: position.y + j });
             }
         }
@@ -114,47 +139,40 @@ const App: React.FC = () => {
         const targetCells = enemy.type === EnemyType.WORKER ? [newTopLeftPos] : getForkliftCellsAt(newTopLeftPos);
 
         for (const cell of targetCells) {
-            // Check for walls, ensuring forklifts don't go off-screen
-            if (enemy.type === EnemyType.PALLET_JACK) {
-                 if (cell.x < 0 || cell.x >= BOARD_WIDTH || cell.y < 0 || cell.y >= BOARD_HEIGHT) {
-                    return false;
-                }
-            } else {
-                 if (isWall(cell)) return false;
-            }
-            
-            if (isRack(cell)) {
-                return false; // Collides with static obstacles
+            if (isWall(cell) || isRack(cell)) {
+                return false;
             }
             if (otherEnemyCells.some(otherCell => arePositionsEqual(cell, otherCell))) {
                 return false; // Collides with another enemy
             }
         }
         return true;
-    }, [isWall, isRack, getEnemyOccupiedCells]);
+    }, [isRack, getEnemyOccupiedCells]);
 
     const generateRacks = useCallback((): Rack[] => {
         const newRacks: Rack[] = [];
-        const numRackRows = 4;
-        const aisleHeight = 4;
 
-        for (let i = 0; i < numRackRows; i++) {
-            const y = 2 + i * aisleHeight;
-            if (y >= BOARD_HEIGHT - 1) continue;
+        // Diseño estático para coincidir con la captura de pantalla
+        const rackRows: { y: number, startX: number, endX: number, gapStart: number, gapEnd: number }[] = [
+            // Estante superior
+            { y: 4, startX: 2, endX: 21, gapStart: 17, gapEnd: 19 },
+            // Estante del medio (debajo de la salida)
+            { y: 10, startX: 2, endX: 21, gapStart: 7, gapEnd: 9 },
+            // Estante inferior
+            { y: 15, startX: 2, endX: 21, gapStart: 3, gapEnd: 5 },
+        ];
 
-            const gapStart = Math.floor(BOARD_WIDTH / 3) + Math.floor(Math.random() * (BOARD_WIDTH / 3));
-            const gapWidth = 3;
-
-            for (let x = 1; x < BOARD_WIDTH - 1; x++) {
-                if (x < gapStart || x >= gapStart + gapWidth) {
-                    if (y !== exitPosition.y) {
-                        newRacks.push({ x, y });
-                    }
+        for (const row of rackRows) {
+            for (let x = row.startX; x <= row.endX; x++) {
+                if (x >= row.gapStart && x <= row.gapEnd) {
+                    continue; // Omitir el hueco
                 }
+                newRacks.push({ x, y: row.y });
             }
         }
+
         return newRacks;
-    }, [exitPosition]);
+    }, []);
     
     const getRandomPatrolTarget = useCallback((currentRacks: Rack[]): Position => {
         let pos: Position;
@@ -189,32 +207,79 @@ const App: React.FC = () => {
         }
         setPlayerPosition(newPlayerPos);
 
-        const enemyCount = ENEMY_BASE_COUNT + newLevel;
-        const newEnemies: Enemy[] = Array.from({ length: enemyCount }, (_, i) => {
-             const type = i % 2 === 0 ? EnemyType.WORKER : EnemyType.PALLET_JACK;
-             const isWorker = type === EnemyType.WORKER;
-             const enemy: Enemy = {
-                id: Date.now() + i,
-                position: { x: exitPosition.x - (isWorker ? 2 : 4), y: exitPosition.y + (i % 5 - 2) },
-                type,
-                speed: isWorker ? WORKER_SPEED : PALLET_JACK_SPEED,
+        const isBossLevel = newLevel === 10;
+        const numForklifts = isBossLevel ? 2 : (newLevel < 4 ? 1 : 2);
+        const numWorkers = isBossLevel ? 9 : newLevel;
+        const newEnemies: Enemy[] = [];
+        let enemyIdCounter = 0;
+
+        for (let i = 0; i < numWorkers; i++) {
+            let workerPos: Position;
+            let attempts = 0;
+            do {
+                workerPos = {
+                    x: exitPosition.x - 2 - Math.floor(Math.random() * 4),
+                    y: exitPosition.y + (i % 5 - 2) + (Math.floor(Math.random() * 5) - 2)
+                };
+                if (attempts++ > 50) { 
+                    workerPos = { x: BOARD_WIDTH - 2, y: 1 + i };
+                    break;
+                }
+            } while (isWall(workerPos) || occupiedByRacks(workerPos));
+
+            newEnemies.push({
+                id: Date.now() + enemyIdCounter++,
+                position: workerPos,
+                type: EnemyType.WORKER,
+                speed: WORKER_SPEED,
                 moveCounter: 0,
-                state: isWorker ? EnemyState.PATROLLING : EnemyState.CHASING,
-                patrolTarget: isWorker ? getRandomPatrolTarget(newRacks) : undefined,
-            };
-             // Ensure forklift is not spawning inside a wall/rack
-            if (type === EnemyType.PALLET_JACK) {
-                 const cells = getForkliftCellsAt(enemy.position);
-                 if (cells.some(c => isWall(c) || occupiedByRacks(c))) {
-                    enemy.position = { x: BOARD_WIDTH - 4, y: 1 };
-                 }
-            }
-            return enemy;
-        });
+                state: EnemyState.PATROLLING,
+                patrolTarget: getRandomPatrolTarget(newRacks),
+            });
+        }
+        
+        const forkliftSpawnPoints: Position[] = [
+            { x: BOARD_WIDTH - 4, y: 3 },  
+            { x: BOARD_WIDTH - 4, y: 11 },
+            { x: BOARD_WIDTH - 4, y: 7 },
+        ];
+
+        for (let i = forkliftSpawnPoints.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [forkliftSpawnPoints[i], forkliftSpawnPoints[j]] = [forkliftSpawnPoints[j], forkliftSpawnPoints[i]];
+        }
+        
+        for (let i = 0; i < numForklifts; i++) {
+            const spawnPos = forkliftSpawnPoints[i];
+            newEnemies.push({
+                id: Date.now() + enemyIdCounter++,
+                position: spawnPos,
+                type: EnemyType.PALLET_JACK,
+                speed: PALLET_JACK_SPEED,
+                moveCounter: 0,
+                state: EnemyState.PATROLLING,
+                patrolTarget: getRandomPatrolTarget(newRacks),
+            });
+        }
+        
+        if (isBossLevel) {
+            const bossSpawnPos = { x: Math.floor(BOARD_WIDTH / 2), y: Math.floor(BOARD_HEIGHT / 2) };
+            newEnemies.push({
+                id: Date.now() + 999,
+                position: bossSpawnPos,
+                type: EnemyType.PALLET_JACK,
+                speed: 1.5, // Faster than normal pallet jacks
+                moveCounter: 0,
+                state: EnemyState.CHASING, // Always chasing
+                isBoss: true,
+            });
+        }
         setEnemies(newEnemies);
         
         const existingPos = [newPlayerPos, ...newEnemies.flatMap(getEnemyOccupiedCells)];
         const newFoodItems: FoodItem[] = [];
+        const isAtExit = (pos: Position) => pos.x >= exitPosition.x && pos.x < exitPosition.x + 2 && pos.y >= exitPosition.y && pos.y < exitPosition.y + 2;
+        
         for (let i = 0; i < FOOD_PER_LEVEL; i++) {
              let foodPos: Position;
              do {
@@ -222,7 +287,7 @@ const App: React.FC = () => {
                     x: Math.floor(Math.random() * BOARD_WIDTH),
                     y: Math.floor(Math.random() * BOARD_HEIGHT),
                 };
-            } while (occupiedByRacks(foodPos) || existingPos.some(p => arePositionsEqual(p, foodPos)) || arePositionsEqual(foodPos, exitPosition));
+            } while (occupiedByRacks(foodPos) || existingPos.some(p => arePositionsEqual(p, foodPos)) || isAtExit(foodPos));
             
             newFoodItems.push({
                 id: Date.now() + i,
@@ -238,6 +303,7 @@ const App: React.FC = () => {
     const startGame = () => {
         setLives(INITIAL_LIVES);
         setLevel(1);
+        setTotalFood(0);
         resetLevel(1);
         setGameState(GameState.PLAYING);
         setKey(prev => prev + 1);
@@ -246,12 +312,31 @@ const App: React.FC = () => {
         playSound('start');
     };
     
+    const startBossFight = () => {
+        setLives(INITIAL_LIVES);
+        setLevel(10);
+        setTotalFood(0);
+        resetLevel(10);
+        setGameState(GameState.BOSS_LEVEL_START);
+        setKey(prev => prev + 1);
+        setIsCaptureInProgress(false);
+        playSound('start');
+    };
+    
     const nextLevel = () => {
         const newLevel = level + 1;
         setLevel(newLevel);
         resetLevel(newLevel);
-        setGameState(GameState.PLAYING);
-        playMusic();
+        if (newLevel === 10) {
+            setGameState(GameState.BOSS_LEVEL_START);
+        } else {
+            setGameState(GameState.PLAYING);
+            playMusic();
+        }
+    };
+
+    const returnToMenu = () => {
+        setGameState(GameState.NOT_STARTED);
     };
 
     const handlePlayerMove = useCallback((direction: Direction) => {
@@ -295,6 +380,11 @@ const App: React.FC = () => {
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+                return;
+            }
+
             const keyMap: { [key: string]: Direction } = {
                 ArrowUp: 'up', W: 'up', w: 'up',
                 ArrowDown: 'down', S: 'down', s: 'down',
@@ -313,40 +403,40 @@ const App: React.FC = () => {
 
     const getNextStep = useCallback((start: Position, target: Position | null, enemy: Enemy, allEnemies: Enemy[]): Position => {
         if (!target) return start;
-        
-        // For forklifts, target the center of the 3x3 grid for better pathing
-        const effectiveTarget = enemy.type === EnemyType.PALLET_JACK ? { x: target.x - 1, y: target.y - 1 } : target;
 
-        const dx = effectiveTarget.x - start.x;
-        const dy = effectiveTarget.y - start.y;
-        
-        let preferredMove: Direction | null = null;
-        let fallbackMove: Direction | null = null;
-        
-        if (Math.abs(dx) > Math.abs(dy)) {
-            preferredMove = dx > 0 ? 'right' : 'left';
-            fallbackMove = dy > 0 ? 'down' : 'up';
+        const dx = target.x - start.x;
+        const dy = target.y - start.y;
+
+        const preferredMove = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+        const fallbackMove = Math.abs(dx) > Math.abs(dy) ? (dy > 0 ? 'down' : 'up') : (dx > 0 ? 'right' : 'left');
+
+        const moves: Direction[] = [preferredMove, fallbackMove];
+        if (preferredMove === 'left' || preferredMove === 'right') {
+            moves.push('up', 'down');
         } else {
-            preferredMove = dy > 0 ? 'down' : 'up';
-            fallbackMove = dx > 0 ? 'right' : 'left';
+            moves.push('left', 'right');
         }
+        
+        const uniqueMoves = [...new Set(moves)];
 
-        const tryMove = (dir: Direction | null): Position | null => {
-            if (!dir) return null;
+        const tryMove = (dir: Direction): Position | null => {
             let { x, y } = start;
             if (dir === 'up') y--; if (dir === 'down') y++; if (dir === 'left') x--; if (dir === 'right') x++;
-            if (!isMoveValid(enemy, {x, y}, allEnemies)) return null;
-            return { x, y };
+            const newPos = { x, y };
+            if (isMoveValid(enemy, newPos, allEnemies)) {
+                return newPos;
+            }
+            return null;
         };
 
-        let nextPos = tryMove(preferredMove);
-        if (nextPos) return nextPos;
+        for (const move of uniqueMoves) {
+            const nextPos = tryMove(move);
+            if (nextPos) return nextPos;
+        }
 
-        nextPos = tryMove(fallbackMove);
-        if (nextPos) return nextPos;
-        
         return start;
     }, [isMoveValid]);
+
 
     const gameLoop = useCallback(() => {
         if (gameState !== GameState.PLAYING || isCaptureInProgress) return;
@@ -362,10 +452,21 @@ const App: React.FC = () => {
                     return { ...enemy, moveCounter: newMoveCounter };
                 }
 
+                if (enemy.type === EnemyType.WORKER && Math.random() < 0.1) {
+                    return { ...enemy, moveCounter: 0 }; 
+                }
+                
                 let currentEnemy = { ...enemy, moveCounter: 0 };
+                
+                if (currentEnemy.isBoss) {
+                    const newPosition = getNextStep(currentEnemy.position, playerPosition, currentEnemy, prevEnemies);
+                    return { ...currentEnemy, position: newPosition };
+                }
+                
                 let newPosition = currentEnemy.position;
                 let newPatrolTarget = currentEnemy.patrolTarget;
                 let newState = currentEnemy.state;
+                let newPathHistory = [...(currentEnemy.pathHistory || []), currentEnemy.position].slice(-4);
 
                 if (currentEnemy.type === EnemyType.WORKER) {
                     const distanceToPlayer = Math.hypot(playerPosition.x - currentEnemy.position.x, playerPosition.y - currentEnemy.position.y);
@@ -394,17 +495,53 @@ const App: React.FC = () => {
                         }
                         newPosition = getNextStep(currentEnemy.position, newPatrolTarget, currentEnemy, prevEnemies);
                     }
-                } else { // PALLET_JACK
-                    const target = isHiding ? lastKnownPlayerPosition : playerPosition;
-                    newPosition = getNextStep(currentEnemy.position, target, currentEnemy, prevEnemies);
+                } else { // PALLET_JACK - With anti-stuck logic
+                    const pathHistory = currentEnemy.pathHistory || [];
+                    const isOscillating = pathHistory.length >= 2 && arePositionsEqual(pathHistory[pathHistory.length - 2], currentEnemy.position);
+
+                    if (isOscillating) {
+                        newPatrolTarget = getRandomPatrolTarget(racks);
+                        const lastPos = pathHistory[pathHistory.length - 1];
+                        const directions: Direction[] = ['up', 'down', 'left', 'right'];
+
+                        for (let i = directions.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [directions[i], directions[j]] = [directions[j], directions[i]];
+                        }
+
+                        let evasiveMoveFound = false;
+                        for (const dir of directions) {
+                            let { x, y } = currentEnemy.position;
+                            if (dir === 'up') y--; if (dir === 'down') y++; if (dir === 'left') x--; if (dir === 'right') x++;
+                            const potentialPos = { x, y };
+
+                            if (!arePositionsEqual(potentialPos, lastPos) && isMoveValid(currentEnemy, potentialPos, prevEnemies)) {
+                                newPosition = potentialPos;
+                                evasiveMoveFound = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!evasiveMoveFound) {
+                            newPosition = getNextStep(currentEnemy.position, newPatrolTarget, currentEnemy, prevEnemies);
+                        }
+                    } else {
+                        const distanceToTarget = newPatrolTarget ? Math.hypot(newPatrolTarget.x - currentEnemy.position.x, newPatrolTarget.y - currentEnemy.position.y) : Infinity;
+                        if (!newPatrolTarget || distanceToTarget < 2) { 
+                            newPatrolTarget = getRandomPatrolTarget(racks);
+                        }
+                        newPosition = getNextStep(currentEnemy.position, newPatrolTarget, currentEnemy, prevEnemies);
+                    }
                 }
 
-                return { ...currentEnemy, position: newPosition, state: newState, patrolTarget: newPatrolTarget };
+                return { ...currentEnemy, position: newPosition, state: newState, patrolTarget: newPatrolTarget, pathHistory: newPathHistory };
             });
         });
         
         const remainingFood = foodItems.filter(food => !arePositionsEqual(playerPosition, food.position));
         if (remainingFood.length < foodItems.length) {
+            const collectedAmount = foodItems.length - remainingFood.length;
+            setTotalFood(prev => prev + collectedAmount);
             playSound('collect');
             setFoodItems(remainingFood);
             if (remainingFood.length === 0 && !allFoodCollected) {
@@ -433,31 +570,62 @@ const App: React.FC = () => {
                         setIsCaptureInProgress(false);
                         setCapturedPosition(null);
 
-                        // Start invulnerability
                         setIsInvulnerable(true);
                         playSound('respawn');
                         if (invulnerabilityTimeoutId) clearTimeout(invulnerabilityTimeoutId);
                         const timeout = setTimeout(() => {
                             setIsInvulnerable(false);
                             setInvulnerabilityTimeoutId(null);
-                        }, 5000); // 5 seconds
+                        }, 5000);
                         setInvulnerabilityTimeoutId(timeout);
                     } else {
+                        const finalName = playerName.trim() === '' ? 'Gato Anónimo' : playerName;
+                        const currentScore = { name: finalName, level, food: totalFood };
+
+                        const updatedLeaderboard = [...leaderboard];
+                        const existingScoreIndex = updatedLeaderboard.findIndex(score => score.name === finalName);
+
+                        if (existingScoreIndex !== -1) {
+                            const existingScore = updatedLeaderboard[existingScoreIndex];
+                            if (currentScore.level > existingScore.level || (currentScore.level === existingScore.level && currentScore.food > existingScore.food)) {
+                                updatedLeaderboard[existingScoreIndex] = currentScore;
+                            }
+                        } else {
+                            updatedLeaderboard.push(currentScore);
+                        }
+                        
+                        updatedLeaderboard.sort((a, b) => {
+                            if (b.level !== a.level) return b.level - a.level;
+                            return b.food - a.food;
+                        });
+
+                        const finalLeaderboard = updatedLeaderboard.slice(0, 10);
+                        setLeaderboard(finalLeaderboard);
+                        localStorage.setItem('leaderboard', JSON.stringify(finalLeaderboard));
+
                         setGameState(GameState.GAME_OVER);
                         playSound('gameOver');
                         stopMusic();
                     }
-                }, 2000); // Animation duration
+                }, 2000);
             }
         }
 
-        if (allFoodCollected && arePositionsEqual(playerPosition, exitPosition)) {
-            setGameState(GameState.LEVEL_COMPLETE);
+        const isPlayerAtExit = allFoodCollected && 
+                               playerPosition.x >= exitPosition.x && playerPosition.x < exitPosition.x + 2 &&
+                               playerPosition.y >= exitPosition.y && playerPosition.y < exitPosition.y + 2;
+
+        if (isPlayerAtExit) {
+            if (level === 10) {
+                setGameState(GameState.CREDITS);
+            } else {
+                setGameState(GameState.LEVEL_COMPLETE);
+            }
             playSound('levelComplete');
             stopMusic();
         }
 
-    }, [gameState, playerPosition, foodItems, enemies, lives, getNextStep, isHiding, allFoodCollected, exitPosition, lastKnownPlayerPosition, hideTimeoutId, racks, getRandomPatrolTarget, isCaptureInProgress, playSound, stopMusic, getEnemyOccupiedCells, isInvulnerable, invulnerabilityTimeoutId]);
+    }, [gameState, playerPosition, foodItems, enemies, lives, getNextStep, isHiding, allFoodCollected, exitPosition, lastKnownPlayerPosition, hideTimeoutId, racks, getRandomPatrolTarget, isCaptureInProgress, playSound, stopMusic, getEnemyOccupiedCells, isInvulnerable, invulnerabilityTimeoutId, totalFood, level, leaderboard, playerName]);
 
     useEffect(() => {
         if (gameState === GameState.PLAYING) {
@@ -467,34 +635,110 @@ const App: React.FC = () => {
     }, [gameState, gameLoop]);
     
     const renderModal = () => {
+        const buttonClass = "bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold py-3 px-6 rounded-lg text-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-yellow-300 w-full sm:w-auto";
+        const bossButtonClass = "bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-red-400 w-full sm:w-auto";
+
         switch (gameState) {
             case GameState.NOT_STARTED:
                 return (
-                    <Modal title="🐱 Gato en el Centro de Distribución" buttonText="¡Empezar a Jugar!" onButtonClick={startGame}>
+                    <Modal title="🐱 Gato en el Centro de Distribución">
+                        <div className="mb-4">
+                            <label htmlFor="playerName" className="block text-lg font-bold mb-2">Ingresa tu nombre (opcional):</label>
+                            <input
+                              id="playerName"
+                              type="text"
+                              value={playerName}
+                              onChange={(e) => setPlayerName(e.target.value)}
+                              placeholder="Gato Anónimo"
+                              maxLength={15}
+                              className="w-full p-2 rounded bg-gray-800 border border-gray-600 text-white text-center focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                            />
+                        </div>
+                        {leaderboard.length > 0 && (
+                            <div className="mb-4 p-3 bg-gray-800 rounded-lg border border-yellow-500">
+                                <h3 className="text-xl font-bold text-yellow-300 mb-2">🏆 El Gato Más Glotón 🏆</h3>
+                                <ol className="text-left text-sm max-h-40 overflow-y-auto pr-2">
+                                    {leaderboard.map((score, index) => (
+                                    <li key={index} className="flex justify-between p-1 border-b border-gray-700 last:border-b-0">
+                                        <span className="font-bold mr-2">{index + 1}. {score.name}</span>
+                                        <span className="text-gray-300">Nvl: {score.level} / Comida: {score.food}</span>
+                                    </li>
+                                    ))}
+                                </ol>
+                            </div>
+                        )}
                         <p>¡Ayuda al gato a conseguir <strong>{FOOD_PER_LEVEL} comidas</strong> y luego escapar!</p>
-                        <p className="font-bold">⌨️ Usa las flechas para moverte.</p>
-                        <p>📱 En móvil, usa los controles en pantalla.</p>
                         <p>🧱 ¡Puedes <strong>esconderte</strong> en las estanterías por 2 segundos!</p>
-                        <p>👷 Los operarios tienen su propia rutina. ¡No los molestes!</p>
-                        <p className="flex items-center justify-center gap-2">
-                           <ForkliftIcon className="w-24 h-24" /> 
-                           <span>Las traspaletas son enormes (3x3). ¡Cuidado!</span>
+                         <p className="flex items-center justify-center gap-2">
+                           <ForkliftIcon className="w-16 h-16" /> 
+                           <span>Las traspaletas miden (2x2). ¡Cuidado!</span>
                         </p>
                         <p>🚚 Después de comer, ¡corre a la salida!</p>
+                        <div className="flex flex-col sm:flex-row gap-4 justify-center mt-8">
+                            <button onClick={startGame} className={buttonClass}>¡Empezar a Jugar!</button>
+                            <button onClick={startBossFight} className={bossButtonClass}>Jefe Final</button>
+                        </div>
+                    </Modal>
+                );
+            case GameState.BOSS_LEVEL_START:
+                return (
+                    <Modal title="🚨 ¡ALERTA DE JEFE! 🚨">
+                         <p className="text-2xl italic text-red-400">"¡Maldito gato, te atraparé!"</p>
+                         <p>El jefe de turno te perseguirá sin descanso en su traspaleta roja.</p>
+                         <div className="mt-6">
+                            <button onClick={() => { setGameState(GameState.PLAYING); playMusic(); }} className={buttonClass}>
+                                ¡Comenzar Nivel 10!
+                            </button>
+                        </div>
+                    </Modal>
+                );
+            case GameState.CREDITS:
+                return (
+                    <Modal title="¡VICTORIA!">
+                        <p className="text-xl mb-4">¡El gato ha escapado y encontrado un lugar seguro junto a su nueva descendencia!</p>
+                        <p className="text-4xl my-4">🐱 ❤️ 🐱🐱🐱🐱</p>
+                        <p className="text-xl italic text-gray-300 mb-6">"Nuestro Gato ahora adiestrará a sus 4 pequeños".</p>
+                        <div className="mt-8">
+                            <button onClick={returnToMenu} className={buttonClass}>
+                                Volver al Menú
+                            </button>
+                        </div>
                     </Modal>
                 );
             case GameState.LEVEL_COMPLETE:
                 return (
-                    <Modal title={`¡Nivel ${level} Superado!`} buttonText={`Ir al Nivel ${level + 1}`} onButtonClick={nextLevel}>
+                    <Modal title={`¡Nivel ${level} Superado!`} >
                         <p>¡El gato escapó! Pero el próximo almacén es más grande...</p>
                         <p className="text-5xl my-4">🎉</p>
+                        <div className="mt-6">
+                           <button onClick={nextLevel} className={buttonClass}>
+                              { level < 9 ? `Ir al Nivel ${level + 1}`: '¡Ir al Jefe Final!'}
+                           </button>
+                        </div>
                     </Modal>
                 );
             case GameState.GAME_OVER:
+                 const finalName = playerName.trim() === '' ? 'Gato Anónimo' : playerName;
                 return (
-                    <Modal title="😿 Fin del Juego" buttonText="Intentar de Nuevo" onButtonClick={startGame}>
+                    <Modal title="😿 Fin del Juego">
                         <p>¡Oh no! El gato ha sido atrapado y escoltado fuera.</p>
-                        <p>Has alcanzado el nivel {level}.</p>
+                        <p>Alcanzaste el nivel <strong>{level}</strong> y recogiste <strong>{totalFood}</strong> comidas.</p>
+                        {leaderboard.length > 0 && (
+                             <div className="mt-4 p-3 bg-gray-600 rounded-lg">
+                                <h3 className="text-lg font-bold text-yellow-300">🏆 El Gato Más Glotón 🏆</h3>
+                                <ol className="text-left text-sm max-h-48 overflow-y-auto pr-2">
+                                  {leaderboard.map((score, index) => (
+                                     <li key={index} className={`flex justify-between p-1 rounded ${score.name === finalName && score.level === level && score.food === totalFood ? 'bg-yellow-500/30' : ''}`}>
+                                         <span>{index + 1}. {score.name}</span>
+                                         <span>Nvl: {score.level} / Com: {score.food}</span>
+                                     </li>
+                                  ))}
+                                </ol>
+                            </div>
+                        )}
+                        <div className="mt-6">
+                            <button onClick={returnToMenu} className={buttonClass}>Intentar de Nuevo</button>
+                        </div>
                     </Modal>
                 );
             default:
@@ -502,100 +746,171 @@ const App: React.FC = () => {
         }
     };
     
-    const loadingDockPositions = [
-        { x: exitPosition.x, y: exitPosition.y - 1 },
-        { x: exitPosition.x, y: exitPosition.y },
-        { x: exitPosition.x, y: exitPosition.y + 1 },
-    ];
+    const loadingDockPositions: Position[] = [];
+    for(let i = 0; i < 2; i++) {
+        for(let j = 0; j < 2; j++) {
+            loadingDockPositions.push({ x: exitPosition.x + i, y: exitPosition.y + j });
+        }
+    }
+    
+    const [scale, setScale] = useState(1);
+    const containerRef = React.useRef<HTMLDivElement>(null);
+    const headerRef = React.useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleResize = () => {
+            if (containerRef.current && headerRef.current) {
+                const { width: containerWidth, height: containerHeight } = containerRef.current.getBoundingClientRect();
+                const headerHeight = headerRef.current.offsetHeight;
+                const availableHeight = containerHeight - headerHeight;
+
+                const gameWidth = BOARD_WIDTH * GRID_SIZE;
+                const gameHeight = BOARD_HEIGHT * GRID_SIZE;
+                
+                const scaleX = containerWidth / gameWidth;
+                const scaleY = availableHeight / gameHeight;
+                
+                setScale(Math.max(0.1, Math.min(scaleX, scaleY)));
+            }
+        };
+
+        handleResize();
+        const resizeObserver = new ResizeObserver(handleResize);
+        if (containerRef.current) {
+            resizeObserver.observe(containerRef.current);
+        }
+        if (headerRef.current) {
+             resizeObserver.observe(headerRef.current);
+        }
+        
+        return () => resizeObserver.disconnect();
+    }, []);
+
+    const scaledWidth = BOARD_WIDTH * GRID_SIZE;
+    const scaledHeight = BOARD_HEIGHT * GRID_SIZE;
 
     return (
-        <main className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4 font-mono">
-            <h1 className="text-3xl font-bold mb-2 text-yellow-400">Gato en el Centro de Distribución</h1>
-            <p className="mb-4 text-gray-400">¡Esquiva, come, escóndete y escapa!</p>
+        <main className="flex flex-col items-center justify-center h-dvh w-screen bg-gray-900 text-white p-2 sm:p-4 font-mono overflow-hidden">
+            <header className="text-center mb-2 sm:mb-4 shrink-0 font-sans">
+                <h1 className="text-3xl sm:text-5xl font-extrabold text-yellow-400 tracking-wider [text-shadow:_2px_2px_4px_rgb(0_0_0_/_50%)]">
+                    🐾 Gato en el Centro de Distribución 🐾
+                </h1>
+                <p className="text-lg sm:text-xl text-gray-300 italic mt-2 tracking-wide">
+                    ¡Esquiva, come, escóndete y escapa!
+                </p>
+            </header>
             
-            <div className="bg-gray-800 p-2 rounded-lg shadow-lg">
-                <div className="flex justify-between items-center bg-gray-900 text-white p-2 rounded-t-md text-xl font-bold w-full">
-                    <div>Nivel: {level}</div>
-                    <div>Comida: {FOOD_PER_LEVEL - foodItems.length}/{FOOD_PER_LEVEL}</div>
-                    <div className="flex items-center space-x-4">
-                        <button onClick={toggleFullscreen} className="text-2xl hover:scale-110 transition-transform focus:outline-none" aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
-                            {isFullscreen ? '↘' : '⛶'}
-                        </button>
-                        <button onClick={toggleMute} className="text-2xl hover:scale-110 transition-transform focus:outline-none" aria-label={isMuted ? 'Activar sonido' : 'Silenciar'}>
-                            {isMuted ? '🔇' : '🔊'}
-                        </button>
-                        <div className="flex items-center space-x-2">
-                        {Array.from({ length: lives }).map((_, i) => (
-                           <span key={i} className="text-red-500 text-2xl animate-pulse">❤️</span>
-                        ))}
+            <div 
+                className="flex-grow w-full flex items-center justify-center relative"
+                ref={containerRef}
+                style={{ minHeight: 0 }}
+            >
+                {renderModal()}
+                
+                <div 
+                    className="bg-gray-800 p-1 sm:p-2 rounded-lg shadow-lg flex flex-col items-center justify-center transition-all duration-300"
+                    style={{ 
+                        width: scaledWidth * scale + 16,
+                        height: scaledHeight * scale + 60,
+                        visibility: gameState === GameState.NOT_STARTED || gameState === GameState.CREDITS ? 'hidden' : 'visible'
+                    }}
+                >
+                    <div ref={headerRef} className="flex justify-between items-center bg-gray-900 text-white p-2 rounded-t-md text-xs sm:text-base md:text-xl font-bold w-full flex-wrap gap-x-2 gap-y-1">
+                        <div className="whitespace-nowrap">Nivel: {level}</div>
+                        <div className="whitespace-nowrap">Comida: {FOOD_PER_LEVEL - foodItems.length}/{FOOD_PER_LEVEL}</div>
+                        <div className="whitespace-nowrap">🏆: {leaderboard.length > 0 ? `${leaderboard[0].level}/${leaderboard[0].food}` : '0/0'}</div>
+                        <div className="flex items-center space-x-2 sm:space-x-4 ml-auto">
+                            <button onClick={toggleFullscreen} className="text-lg sm:text-2xl hover:scale-110 transition-transform focus:outline-none" aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
+                                {isFullscreen ? '↘' : '⛶'}
+                            </button>
+                            <button onClick={toggleMute} className="text-lg sm:text-2xl hover:scale-110 transition-transform focus:outline-none" aria-label={isMuted ? 'Activar sonido' : 'Silenciar'}>
+                                {isMuted ? '🔇' : '🔊'}
+                            </button>
+                            <div className="flex items-center space-x-1 sm:space-x-2">
+                            {Array.from({ length: lives }).map((_, i) => (
+                               <span key={i} className="text-red-500 text-lg sm:text-2xl animate-pulse">❤️</span>
+                            ))}
+                            </div>
                         </div>
                     </div>
-                </div>
-                
-                <div
-                  key={key}
-                  className="relative bg-gray-600 bg-checkered overflow-hidden"
-                  style={{ width: BOARD_WIDTH * GRID_SIZE, height: BOARD_HEIGHT * GRID_SIZE }}
-                >
-                    {renderModal()}
-                    {gameMessage && <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-black/60 text-white px-4 py-2 rounded-lg z-20 text-center animate-pulse">{gameMessage}</div>}
                     
-                    {gameState !== GameState.NOT_STARTED && (
-                      <>
-                        {loadingDockPositions.map((pos, i) => (
-                            <div key={`dock-${i}`} className="absolute bg-gray-700/80 border-l-4 border-yellow-400" style={{ left: pos.x * GRID_SIZE, top: pos.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE, boxSizing: 'border-box' }}></div>
-                        ))}
-                        {racks.map((rack, i) => (
-                             <div key={`rack-${i}`} className="absolute bg-gray-700 border-t border-gray-500" style={{ left: rack.x * GRID_SIZE, top: rack.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE, boxSizing: 'border-box' }}></div>
-                        ))}
-                        <div className="absolute text-4xl z-10 flex justify-center items-center" style={{ left: exitPosition.x * GRID_SIZE, top: exitPosition.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE }}>{EXIT_EMOJI}</div>
-                        {foodItems.map(food => (
-                            <div key={food.id} className="absolute text-4xl animate-bounce flex justify-center items-center" style={{ left: food.position.x * GRID_SIZE, top: food.position.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE }}>{food.emoji}</div>
-                        ))}
-                        {enemies.map(enemy => (
-                            <div key={enemy.id} className="absolute transition-all duration-200 ease-linear flex justify-center items-center" 
-                                 style={{ 
-                                    left: enemy.position.x * GRID_SIZE, 
-                                    top: enemy.position.y * GRID_SIZE, 
-                                    width: enemy.type === EnemyType.WORKER ? GRID_SIZE : GRID_SIZE * 3, 
-                                    height: enemy.type === EnemyType.WORKER ? GRID_SIZE : GRID_SIZE * 3,
-                                 }}>
-                                {enemy.type === EnemyType.WORKER ? <span className="text-4xl">👷</span> : <ForkliftIcon className="w-full h-full" />}
-                            </div>
-                        ))}
+                    <div
+                      key={key}
+                      className="relative bg-gray-600 bg-checkered overflow-hidden"
+                      style={{ 
+                          width: scaledWidth, 
+                          height: scaledHeight,
+                          transform: `scale(${scale})`,
+                          transformOrigin: 'top left'
+                      }}
+                    >
                         
-                        {!isCaptureInProgress ? (
-                             <div className={`absolute transition-transform duration-200 ease-out flex justify-center items-center ${isHiding ? 'opacity-50' : 'opacity-100'} ${isInvulnerable ? 'animate-blink' : ''}`} style={{ 
-                                width: GRID_SIZE, 
-                                height: GRID_SIZE,
-                                transform: `translate(${playerPosition.x * GRID_SIZE}px, ${playerPosition.y * GRID_SIZE}px)`
-                             }}>
-                                <span className="text-4xl">🐱</span>
-                             </div>
-                        ) : capturedPosition && (
-                            <div
-                                className="absolute z-30 capture-animation-container"
-                                style={{
-                                    '--start-x': `${capturedPosition.x * GRID_SIZE}px`,
-                                    '--start-y': `${capturedPosition.y * GRID_SIZE}px`,
-                                    '--end-x': `${exitPosition.x * GRID_SIZE}px`,
-                                    '--end-y': `${exitPosition.y * GRID_SIZE}px`,
-                                } as React.CSSProperties}
-                            >
-                                <div className="absolute text-5xl" style={{transform: 'translate(-12px, -20px)'}}>✋</div>
-                                <div className="absolute text-4xl" style={{transform: 'translate(-8px, -8px)'}}>😿</div>
-                            </div>
+                        {gameMessage && <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-black/60 text-white px-4 py-2 rounded-lg z-20 text-center animate-pulse">{gameMessage}</div>}
+                        
+                        {(gameState !== GameState.NOT_STARTED && gameState !== GameState.CREDITS) && (
+                          <>
+                            {loadingDockPositions.map((pos, i) => (
+                                <div key={`dock-${i}`} className="absolute bg-gray-700/80 border-l-4 border-yellow-400" style={{ left: pos.x * GRID_SIZE, top: pos.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE, boxSizing: 'border-box' }}></div>
+                            ))}
+                            {racks.map((rack, i) => (
+                                 <div key={`rack-${i}`} className="absolute bg-gray-700 border-t border-gray-500" style={{ left: rack.x * GRID_SIZE, top: rack.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE, boxSizing: 'border-box' }}></div>
+                            ))}
+                            <div className="absolute text-6xl z-10 flex justify-center items-center" style={{ left: exitPosition.x * GRID_SIZE, top: exitPosition.y * GRID_SIZE, width: GRID_SIZE * 2, height: GRID_SIZE * 2 }}>{EXIT_EMOJI}</div>
+                            {foodItems.map(food => (
+                                <div key={food.id} className="absolute text-4xl animate-bounce flex justify-center items-center" style={{ left: food.position.x * GRID_SIZE, top: food.position.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE }}>{food.emoji}</div>
+                            ))}
+                            {enemies.map(enemy => (
+                                <div key={enemy.id} className="absolute transition-all duration-200 ease-linear flex justify-center items-center" 
+                                     style={{ 
+                                        left: enemy.position.x * GRID_SIZE, 
+                                        top: enemy.position.y * GRID_SIZE, 
+                                        width: enemy.type === EnemyType.WORKER ? GRID_SIZE : GRID_SIZE * 2, 
+                                        height: enemy.type === EnemyType.WORKER ? GRID_SIZE : GRID_SIZE * 2,
+                                     }}>
+                                    {enemy.type === EnemyType.WORKER ? <span className="text-4xl">👷</span> : <ForkliftIcon className="w-full h-full" color={enemy.isBoss ? '#DC2626' : undefined} />}
+                                </div>
+                            ))}
+                            
+                            {!isCaptureInProgress ? (
+                                 <div className={`absolute transition-transform duration-200 ease-out flex justify-center items-center ${isHiding ? 'opacity-50' : 'opacity-100'} ${isInvulnerable ? 'animate-blink' : ''}`} style={{ 
+                                    width: GRID_SIZE, 
+                                    height: GRID_SIZE,
+                                    transform: `translate(${playerPosition.x * GRID_SIZE}px, ${playerPosition.y * GRID_SIZE}px)`
+                                 }}>
+                                    <span className="text-4xl">🐱</span>
+                                 </div>
+                            ) : capturedPosition && (
+                                <div
+                                    className="absolute z-30 capture-animation-container"
+                                    style={{
+                                        '--start-x': `${capturedPosition.x * GRID_SIZE}px`,
+                                        '--start-y': `${capturedPosition.y * GRID_SIZE}px`,
+                                        '--end-x': `${exitPosition.x * GRID_SIZE}px`,
+                                        '--end-y': `${exitPosition.y * GRID_SIZE}px`,
+                                    } as React.CSSProperties}
+                                >
+                                    <div className="absolute text-5xl" style={{transform: 'translate(-12px, -20px)'}}>✋</div>
+                                    <div className="absolute text-4xl" style={{transform: 'translate(-8px, -8px)'}}>😿</div>
+                                </div>
+                            )}
+                          </>
                         )}
-                      </>
-                    )}
+                    </div>
                 </div>
             </div>
             {isTouchDevice && gameState === GameState.PLAYING && <DPad onMove={handlePlayerMove} />}
-            <footer className="mt-6 text-center text-gray-500 text-sm">
+            <footer className="mt-2 text-center text-gray-500 text-xs sm:text-sm hidden sm:block shrink-0">
                 <p>Usa las teclas [↑ ↓ ← →] o [W A S D] para moverte.</p>
                 <p>Muévete a las estanterías 🧱 para esconderte por 2 segundos.</p>
             </footer>
             <style>{`
+                html, body, #root {
+                    height: 100%;
+                    width: 100%;
+                    margin: 0;
+                    padding: 0;
+                    overflow: hidden;
+                }
                 .bg-checkered {
                     background-image: linear-gradient(45deg, #5a6678 25%, transparent 25%), linear-gradient(-45deg, #5a6678 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #5a6678 75%), linear-gradient(-45deg, transparent 75%, #5a6678 75%);
                     background-size: ${GRID_SIZE}px ${GRID_SIZE}px;

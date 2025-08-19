@@ -1,4 +1,3 @@
-
 export type Position = {
   x: number;
   y: number;
@@ -22,6 +21,8 @@ export type Enemy = {
   speed: number;
   moveCounter: number;
   state: EnemyState;
+  pathHistory?: Position[];
+  isBoss?: boolean;
 };
 
 export enum GameState {
@@ -29,6 +30,8 @@ export enum GameState {
   PLAYING = 'PLAYING',
   LEVEL_COMPLETE = 'LEVEL_COMPLETE',
   GAME_OVER = 'GAME_OVER',
+  BOSS_LEVEL_START = 'BOSS_LEVEL_START',
+  CREDITS = 'CREDITS',
 }
 
 export type Direction = 'up' | 'down' | 'left' | 'right';
@@ -40,3 +43,9 @@ export type FoodItem = {
 }
 
 export type Rack = Position;
+
+export type HighScoreEntry = {
+  name: string;
+  level: number;
+  food: number;
+};
