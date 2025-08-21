@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Position, Enemy, EnemyType, GameState, Direction, FoodItem, Rack, EnemyState, HighScoreEntry } from './types';
 import { BOARD_WIDTH, BOARD_HEIGHT, GRID_SIZE, INITIAL_LIVES, BASE_GAME_TICK, FOOD_PER_LEVEL, FOOD_EMOJIS, ENEMY_BASE_COUNT, HIDING_DURATION_MS, EXIT_EMOJI, WORKER_SPEED, PALLET_JACK_SPEED, WORKER_VISION_RANGE } from './constants';
@@ -770,7 +769,7 @@ const App: React.FC = () => {
                 const scaleX = containerWidth / gameWidth;
                 const scaleY = availableHeight / gameHeight;
                 
-                setScale(Math.max(0.1, Math.min(scaleX, scaleY)));
+                setScale(Math.max(0.1, Math.min(scaleX, scaleY, 1)));
             }
         };
 
@@ -788,6 +787,9 @@ const App: React.FC = () => {
 
     const scaledWidth = BOARD_WIDTH * GRID_SIZE;
     const scaledHeight = BOARD_HEIGHT * GRID_SIZE;
+    
+    const gameWrapperWidth = scaledWidth * scale;
+    const gameWrapperHeight = scaledHeight * scale;
 
     return (
         <main className="flex flex-col items-center justify-center h-dvh w-screen bg-gray-900 text-white p-2 sm:p-4 font-mono overflow-hidden">
@@ -810,12 +812,10 @@ const App: React.FC = () => {
                 <div 
                     className="bg-gray-800 p-1 sm:p-2 rounded-lg shadow-lg flex flex-col items-center justify-center transition-all duration-300"
                     style={{ 
-                        width: scaledWidth * scale + 16,
-                        height: scaledHeight * scale + 60,
                         visibility: gameState === GameState.NOT_STARTED || gameState === GameState.CREDITS ? 'hidden' : 'visible'
                     }}
                 >
-                    <div ref={headerRef} className="flex justify-between items-center bg-gray-900 text-white p-2 rounded-t-md text-xs sm:text-base md:text-xl font-bold w-full flex-wrap gap-x-2 gap-y-1">
+                    <div ref={headerRef} className="flex justify-between items-center bg-gray-900 text-white p-2 rounded-t-md text-xs sm:text-base md:text-xl font-bold w-full flex-wrap gap-x-2 gap-y-1" style={{ width: gameWrapperWidth }}>
                         <div className="whitespace-nowrap">Nivel: {level}</div>
                         <div className="whitespace-nowrap">Comida: {FOOD_PER_LEVEL - foodItems.length}/{FOOD_PER_LEVEL}</div>
                         <div className="whitespace-nowrap">🏆: {leaderboard.length > 0 ? `${leaderboard[0].level}/${leaderboard[0].food}` : '0/0'}</div>
@@ -838,63 +838,70 @@ const App: React.FC = () => {
                       key={key}
                       className="relative bg-gray-600 bg-checkered overflow-hidden"
                       style={{ 
-                          width: scaledWidth, 
-                          height: scaledHeight,
-                          transform: `scale(${scale})`,
-                          transformOrigin: 'top left'
+                          width: gameWrapperWidth, 
+                          height: gameWrapperHeight,
                       }}
                     >
-                        
-                        {gameMessage && <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-black/60 text-white px-4 py-2 rounded-lg z-20 text-center animate-pulse">{gameMessage}</div>}
-                        
-                        {(gameState !== GameState.NOT_STARTED && gameState !== GameState.CREDITS) && (
-                          <>
-                            {loadingDockPositions.map((pos, i) => (
-                                <div key={`dock-${i}`} className="absolute bg-gray-700/80 border-l-4 border-yellow-400" style={{ left: pos.x * GRID_SIZE, top: pos.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE, boxSizing: 'border-box' }}></div>
-                            ))}
-                            {racks.map((rack, i) => (
-                                 <div key={`rack-${i}`} className="absolute bg-gray-700 border-t border-gray-500" style={{ left: rack.x * GRID_SIZE, top: rack.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE, boxSizing: 'border-box' }}></div>
-                            ))}
-                            <div className="absolute text-6xl z-10 flex justify-center items-center" style={{ left: exitPosition.x * GRID_SIZE, top: exitPosition.y * GRID_SIZE, width: GRID_SIZE * 2, height: GRID_SIZE * 2 }}>{EXIT_EMOJI}</div>
-                            {foodItems.map(food => (
-                                <div key={food.id} className="absolute text-4xl animate-bounce flex justify-center items-center" style={{ left: food.position.x * GRID_SIZE, top: food.position.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE }}>{food.emoji}</div>
-                            ))}
-                            {enemies.map(enemy => (
-                                <div key={enemy.id} className="absolute transition-all duration-200 ease-linear flex justify-center items-center" 
-                                     style={{ 
-                                        left: enemy.position.x * GRID_SIZE, 
-                                        top: enemy.position.y * GRID_SIZE, 
-                                        width: enemy.type === EnemyType.WORKER ? GRID_SIZE : GRID_SIZE * 2, 
-                                        height: enemy.type === EnemyType.WORKER ? GRID_SIZE : GRID_SIZE * 2,
-                                     }}>
-                                    {enemy.type === EnemyType.WORKER ? <span className="text-4xl">👷</span> : <ForkliftIcon className="w-full h-full" color={enemy.isBoss ? '#DC2626' : undefined} />}
-                                </div>
-                            ))}
+                        <div style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: scaledWidth,
+                            height: scaledHeight,
+                            transform: `scale(${scale})`,
+                            transformOrigin: 'top left',
+                        }}>
+                            {gameMessage && <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-black/60 text-white px-4 py-2 rounded-lg z-20 text-center animate-pulse">{gameMessage}</div>}
                             
-                            {!isCaptureInProgress ? (
-                                 <div className={`absolute transition-transform duration-200 ease-out flex justify-center items-center ${isHiding ? 'opacity-50' : 'opacity-100'} ${isInvulnerable ? 'animate-blink' : ''}`} style={{ 
-                                    width: GRID_SIZE, 
-                                    height: GRID_SIZE,
-                                    transform: `translate(${playerPosition.x * GRID_SIZE}px, ${playerPosition.y * GRID_SIZE}px)`
-                                 }}>
-                                    <span className="text-4xl">🐱</span>
-                                 </div>
-                            ) : capturedPosition && (
-                                <div
-                                    className="absolute z-30 capture-animation-container"
-                                    style={{
-                                        '--start-x': `${capturedPosition.x * GRID_SIZE}px`,
-                                        '--start-y': `${capturedPosition.y * GRID_SIZE}px`,
-                                        '--end-x': `${exitPosition.x * GRID_SIZE}px`,
-                                        '--end-y': `${exitPosition.y * GRID_SIZE}px`,
-                                    } as React.CSSProperties}
-                                >
-                                    <div className="absolute text-5xl" style={{transform: 'translate(-12px, -20px)'}}>✋</div>
-                                    <div className="absolute text-4xl" style={{transform: 'translate(-8px, -8px)'}}>😿</div>
-                                </div>
+                            {(gameState !== GameState.NOT_STARTED && gameState !== GameState.CREDITS) && (
+                              <>
+                                {loadingDockPositions.map((pos, i) => (
+                                    <div key={`dock-${i}`} className="absolute bg-gray-700/80 border-l-4 border-yellow-400" style={{ left: pos.x * GRID_SIZE, top: pos.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE, boxSizing: 'border-box' }}></div>
+                                ))}
+                                {racks.map((rack, i) => (
+                                     <div key={`rack-${i}`} className="absolute bg-gray-700 border-t border-gray-500" style={{ left: rack.x * GRID_SIZE, top: rack.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE, boxSizing: 'border-box' }}></div>
+                                ))}
+                                <div className="absolute text-6xl z-10 flex justify-center items-center" style={{ left: exitPosition.x * GRID_SIZE, top: exitPosition.y * GRID_SIZE, width: GRID_SIZE * 2, height: GRID_SIZE * 2 }}>{EXIT_EMOJI}</div>
+                                {foodItems.map(food => (
+                                    <div key={food.id} className="absolute text-4xl animate-bounce flex justify-center items-center" style={{ left: food.position.x * GRID_SIZE, top: food.position.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE }}>{food.emoji}</div>
+                                ))}
+                                {enemies.map(enemy => (
+                                    <div key={enemy.id} className="absolute transition-all duration-200 ease-linear flex justify-center items-center" 
+                                         style={{ 
+                                            left: enemy.position.x * GRID_SIZE, 
+                                            top: enemy.position.y * GRID_SIZE, 
+                                            width: enemy.type === EnemyType.WORKER ? GRID_SIZE : GRID_SIZE * 2, 
+                                            height: enemy.type === EnemyType.WORKER ? GRID_SIZE : GRID_SIZE * 2,
+                                         }}>
+                                        {enemy.type === EnemyType.WORKER ? <span className="text-4xl">👷</span> : <ForkliftIcon className="w-full h-full" color={enemy.isBoss ? '#DC2626' : undefined} />}
+                                    </div>
+                                ))}
+                                
+                                {!isCaptureInProgress ? (
+                                     <div className={`absolute transition-transform duration-200 ease-out flex justify-center items-center ${isHiding ? 'opacity-50' : 'opacity-100'} ${isInvulnerable ? 'animate-blink' : ''}`} style={{ 
+                                        width: GRID_SIZE, 
+                                        height: GRID_SIZE,
+                                        transform: `translate(${playerPosition.x * GRID_SIZE}px, ${playerPosition.y * GRID_SIZE}px)`
+                                     }}>
+                                        <span className="text-4xl">🐱</span>
+                                     </div>
+                                ) : capturedPosition && (
+                                    <div
+                                        className="absolute z-30 capture-animation-container"
+                                        style={{
+                                            '--start-x': `${capturedPosition.x * GRID_SIZE}px`,
+                                            '--start-y': `${capturedPosition.y * GRID_SIZE}px`,
+                                            '--end-x': `${exitPosition.x * GRID_SIZE}px`,
+                                            '--end-y': `${exitPosition.y * GRID_SIZE}px`,
+                                        } as React.CSSProperties}
+                                    >
+                                        <div className="absolute text-5xl" style={{transform: 'translate(-12px, -20px)'}}>✋</div>
+                                        <div className="absolute text-4xl" style={{transform: 'translate(-8px, -8px)'}}>😿</div>
+                                    </div>
+                                )}
+                              </>
                             )}
-                          </>
-                        )}
+                        </div>
                     </div>
                 </div>
             </div>
