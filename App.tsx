@@ -640,7 +640,7 @@ const App: React.FC = () => {
         switch (gameState) {
             case GameState.NOT_STARTED:
                 return (
-                    <Modal title="🐱 Gato en el Centro de Distribución">
+                    <Modal title="🐱 Centro de Distribución">
                         <div className="mb-4">
                             <label htmlFor="playerName" className="block text-lg font-bold mb-2">Ingresa tu nombre (opcional):</label>
                             <input
@@ -656,7 +656,7 @@ const App: React.FC = () => {
                         {leaderboard.length > 0 && (
                             <div className="mb-4 p-3 bg-gray-800 rounded-lg border border-yellow-500">
                                 <h3 className="text-xl font-bold text-yellow-300 mb-2">🏆 El Gato Más Glotón 🏆</h3>
-                                <ol className="text-left text-sm max-h-40 overflow-y-auto pr-2">
+                                <ol className="text-left text-sm pr-2">
                                     {leaderboard.map((score, index) => (
                                     <li key={index} className="flex justify-between p-1 border-b border-gray-700 last:border-b-0">
                                         <span className="font-bold mr-2">{index + 1}. {score.name}</span>
@@ -666,13 +666,12 @@ const App: React.FC = () => {
                                 </ol>
                             </div>
                         )}
-                        <p>¡Ayuda al gato a conseguir <strong>{FOOD_PER_LEVEL} comidas</strong> y luego escapar!</p>
-                        <p>🧱 ¡Puedes <strong>esconderte</strong> en las estanterías por 2 segundos!</p>
-                         <p className="flex items-center justify-center gap-2">
-                           <ForkliftIcon className="w-16 h-16" /> 
-                           <span>Las traspaletas miden (2x2). ¡Cuidado!</span>
+                        <p>¡Consigue <strong>{FOOD_PER_LEVEL} comidas</strong> 🐟 para poder escapar 🚚!</p>
+                        <p>Usa las estanterías 🧱 para <strong>esconderte</strong>.</p>
+                        <p className="flex items-center justify-center gap-2">
+                           <ForkliftIcon className="w-12 h-12" /> 
+                           <span>¡Cuidado con las traspaletas!</span>
                         </p>
-                        <p>🚚 Después de comer, ¡corre a la salida!</p>
                         <div className="flex flex-col sm:flex-row gap-4 justify-center mt-8">
                             <button onClick={startGame} className={buttonClass}>¡Empezar a Jugar!</button>
                             <button onClick={startBossFight} className={bossButtonClass}>Jefe Final</button>
@@ -693,11 +692,11 @@ const App: React.FC = () => {
                 );
             case GameState.CREDITS:
                 return (
-                    <Modal title="¡VICTORIA!">
-                        <p className="text-xl mb-4">¡El gato ha escapado y encontrado un lugar seguro junto a su nueva descendencia!</p>
-                        <p className="text-4xl my-4">🐱 ❤️ 🐱🐱🐱🐱</p>
-                        <p className="text-xl italic text-gray-300 mb-6">"Nuestro Gato ahora adiestrará a sus 4 pequeños".</p>
-                        <div className="mt-8">
+                    <Modal title="🎉 ¡VICTORIA! 🎉">
+                        <p className="text-2xl mb-4">¡Lo lograste! El gato es libre.</p>
+                        <p className="text-5xl my-4 animate-bounce">🐱👑</p>
+                        <p className="text-xl italic text-gray-300 mb-6">Tu hazaña será recordada en el almacén.</p>
+                        <div className="mt-6">
                             <button onClick={returnToMenu} className={buttonClass}>
                                 Volver al Menú
                             </button>
@@ -725,7 +724,7 @@ const App: React.FC = () => {
                         {leaderboard.length > 0 && (
                              <div className="mt-4 p-3 bg-gray-600 rounded-lg">
                                 <h3 className="text-lg font-bold text-yellow-300">🏆 El Gato Más Glotón 🏆</h3>
-                                <ol className="text-left text-sm max-h-48 overflow-y-auto pr-2">
+                                <ol className="text-left text-sm pr-2">
                                   {leaderboard.map((score, index) => (
                                      <li key={index} className={`flex justify-between p-1 rounded ${score.name === finalName && score.level === level && score.food === totalFood ? 'bg-yellow-500/30' : ''}`}>
                                          <span>{index + 1}. {score.name}</span>
