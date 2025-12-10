@@ -1,20 +1,30 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# 🐾 Gato en el Centro de Distribución 🐾
 
-# Run and deploy your AI Studio app
+¡Ayuda al gato a recolectar toda la comida y escapar del centro de distribución sin ser atrapado!
 
-This contains everything you need to run your app locally.
+## Cómo jugar
 
-View your app in AI Studio: https://ai.studio/apps/drive/1BilKirmFhrT5pEm69PdmogRR2K6eSYsz
+*   **Objetivo:** Recoge toda la comida (🐟 🍖) en cada nivel para abrir la salida (🚚).
+*   **Controles:** Usa las flechas del teclado `↑` `↓` `←` `→` o `W` `A` `S` `D`. En móviles, usa el pad virtual.
+*   **Enemigos:**
+    *   **Trabajadores (👷):** Patrullan el almacén. Si te ven, te perseguirán.
+    *   **Traspaletas (🚜):** Se mueven rápido y son peligrosas.
+*   **Esconderse:** Puedes esconderte en las estanterías (🧱) por unos segundos.
+*   **Power-Ups:**
+    *   **Congelar (⏳):** Detiene a todos los enemigos por 5 segundos.
 
-## Run Locally
+## Instalación y Ejecución
 
-**Prerequisites:**  Node.js
+1.  Instala las dependencias:
+    ```bash
+    npm install
+    ```
+2.  Ejecuta el servidor de desarrollo:
+    ```bash
+    npm run dev
+    ```
+3.  Abre tu navegador en `http://localhost:5173`.
 
+## Créditos
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Desarrollado con React, Vite y Tailwind CSS.

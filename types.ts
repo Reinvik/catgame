@@ -11,6 +11,7 @@ export enum EnemyType {
 export enum EnemyState {
   PATROLLING,
   CHASING,
+  FROZEN,
 }
 
 export type Enemy = {
@@ -32,6 +33,7 @@ export enum GameState {
   GAME_OVER = 'GAME_OVER',
   BOSS_LEVEL_START = 'BOSS_LEVEL_START',
   CREDITS = 'CREDITS',
+  PAUSED = 'PAUSED', // New state
 }
 
 export type Direction = 'up' | 'down' | 'left' | 'right';
@@ -42,6 +44,16 @@ export type FoodItem = {
     emoji: string;
 }
 
+export enum PowerUpType {
+  FREEZE_ENEMIES = 'FREEZE_ENEMIES',
+}
+
+export type PowerUp = {
+    id: number;
+    position: Position;
+    type: PowerUpType;
+}
+
 export type Rack = Position;
 
 export type HighScoreEntry = {
@@ -49,3 +61,14 @@ export type HighScoreEntry = {
   level: number;
   food: number;
 };
+
+export type Particle = {
+    id: number;
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    emoji: string;
+    life: number; // 0 to 1
+    color?: string;
+}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Position, Enemy, EnemyType, GameState, Direction, FoodItem, Rack, EnemyState, HighScoreEntry } from './types';
-import { BOARD_WIDTH, BOARD_HEIGHT, GRID_SIZE, INITIAL_LIVES, BASE_GAME_TICK, FOOD_PER_LEVEL, FOOD_EMOJIS, ENEMY_BASE_COUNT, HIDING_DURATION_MS, EXIT_EMOJI, WORKER_SPEED, PALLET_JACK_SPEED, WORKER_VISION_RANGE } from './constants';
+import { Position, Enemy, EnemyType, GameState, Direction, FoodItem, Rack, EnemyState, HighScoreEntry, PowerUp, PowerUpType, Particle } from './types';
+import { BOARD_WIDTH, BOARD_HEIGHT, GRID_SIZE, INITIAL_LIVES, BASE_GAME_TICK, FOOD_PER_LEVEL, FOOD_EMOJIS, ENEMY_BASE_COUNT, HIDING_DURATION_MS, EXIT_EMOJI, WORKER_SPEED, PALLET_JACK_SPEED, WORKER_VISION_RANGE, FREEZE_DURATION_MS, POWERUP_EMOJI } from './constants';
 import Modal from './components/Modal';
 import ForkliftIcon from './components/ForkliftIcon';
 import { useAudio } from './hooks/useAudio';
@@ -42,6 +42,8 @@ const App: React.FC = () => {
     const [level, setLevel] = useState<number>(1);
     const [playerPosition, setPlayerPosition] = useState<Position>({ x: 1, y: 1 });
     const [foodItems, setFoodItems] = useState<FoodItem[]>([]);
+    const [powerUps, setPowerUps] = useState<PowerUp[]>([]);
+    const [particles, setParticles] = useState<Particle[]>([]);
     const [enemies, setEnemies] = useState<Enemy[]>([]);
     const [racks, setRacks] = useState<Rack[]>([]);
     const [exitPosition] = useState<Position>({ x: BOARD_WIDTH - 2, y: Math.floor(BOARD_HEIGHT / 2) - 1 });
@@ -54,6 +56,9 @@ const App: React.FC = () => {
     const [lastKnownPlayerPosition, setLastKnownPlayerPosition] = useState<Position | null>(null);
     const [isCaptureInProgress, setIsCaptureInProgress] = useState<boolean>(false);
     const [capturedPosition, setCapturedPosition] = useState<Position | null>(null);
+
+    const [enemiesFrozen, setEnemiesFrozen] = useState<boolean>(false);
+    const [freezeTimeoutId, setFreezeTimeoutId] = useState<ReturnType<typeof setTimeout> | null>(null);
 
     const [isInvulnerable, setIsInvulnerable] = useState<boolean>(false);
     const [invulnerabilityTimeoutId, setInvulnerabilityTimeoutId] = useState<ReturnType<typeof setTimeout> | null>(null);
@@ -195,6 +200,10 @@ const App: React.FC = () => {
         setHideTimeoutId(null);
         setIsCaptureInProgress(false);
 
+        setEnemiesFrozen(false);
+        if (freezeTimeoutId) clearTimeout(freezeTimeoutId);
+        setFreezeTimeoutId(null);
+
         setIsInvulnerable(false);
         if (invulnerabilityTimeoutId) clearTimeout(invulnerabilityTimeoutId);
         setInvulnerabilityTimeoutId(null);
@@ -297,7 +306,26 @@ const App: React.FC = () => {
         }
         setFoodItems(newFoodItems);
 
-    }, [exitPosition, generateRacks, getRandomPatrolTarget, hideTimeoutId, getEnemyOccupiedCells, invulnerabilityTimeoutId]);
+        // Spawn PowerUps (10% chance per level or fixed amount)
+        const newPowerUps: PowerUp[] = [];
+        if (Math.random() < 0.3) { // 30% chance for a powerup to spawn
+             let powerUpPos: Position;
+             do {
+                powerUpPos = {
+                    x: Math.floor(Math.random() * BOARD_WIDTH),
+                    y: Math.floor(Math.random() * BOARD_HEIGHT),
+                };
+            } while (occupiedByRacks(powerUpPos) || existingPos.some(p => arePositionsEqual(p, powerUpPos)) || isAtExit(powerUpPos));
+            
+            newPowerUps.push({
+                id: Date.now() + 1000,
+                position: powerUpPos,
+                type: PowerUpType.FREEZE_ENEMIES,
+            });
+        }
+        setPowerUps(newPowerUps);
+
+    }, [exitPosition, generateRacks, getRandomPatrolTarget, hideTimeoutId, getEnemyOccupiedCells, invulnerabilityTimeoutId, freezeTimeoutId]);
 
     const startGame = () => {
         setLives(INITIAL_LIVES);
@@ -331,6 +359,14 @@ const App: React.FC = () => {
         } else {
             setGameState(GameState.PLAYING);
             playMusic();
+        }
+    };
+
+    const togglePause = () => {
+        if (gameState === GameState.PLAYING) {
+            setGameState(GameState.PAUSED);
+        } else if (gameState === GameState.PAUSED) {
+            setGameState(GameState.PLAYING);
         }
     };
 
@@ -437,14 +473,43 @@ const App: React.FC = () => {
     }, [isMoveValid]);
 
 
+    const createParticles = useCallback((x: number, y: number, emoji: string, color?: string) => {
+        const newParticles: Particle[] = [];
+        for (let i = 0; i < 8; i++) {
+            newParticles.push({
+                id: Date.now() + Math.random(),
+                x: x,
+                y: y,
+                vx: (Math.random() - 0.5) * 10,
+                vy: (Math.random() - 0.5) * 10,
+                emoji,
+                life: 1.0,
+                color,
+            });
+        }
+        setParticles(prev => [...prev, ...newParticles]);
+    }, []);
+
     const gameLoop = useCallback(() => {
         if (gameState !== GameState.PLAYING || isCaptureInProgress) return;
+
+        // Update particles
+        setParticles(prevParticles => {
+            return prevParticles.map(p => ({
+                ...p,
+                x: p.x + p.vx,
+                y: p.y + p.vy,
+                life: p.life - 0.05
+            })).filter(p => p.life > 0);
+        });
 
         if (!isHiding) {
             setLastKnownPlayerPosition(playerPosition);
         }
 
         setEnemies(prevEnemies => {
+            if (enemiesFrozen) return prevEnemies;
+
             return prevEnemies.map(enemy => {
                 const newMoveCounter = enemy.moveCounter + 1;
                 if (newMoveCounter < enemy.speed) {
@@ -542,11 +607,40 @@ const App: React.FC = () => {
             const collectedAmount = foodItems.length - remainingFood.length;
             setTotalFood(prev => prev + collectedAmount);
             playSound('collect');
+            
+            // Particles
+            const collectedItems = foodItems.filter(food => arePositionsEqual(playerPosition, food.position));
+            collectedItems.forEach(item => {
+                createParticles(item.position.x * GRID_SIZE + GRID_SIZE / 2, item.position.y * GRID_SIZE + GRID_SIZE / 2, item.emoji);
+            });
+
             setFoodItems(remainingFood);
             if (remainingFood.length === 0 && !allFoodCollected) {
                  setAllFoodCollected(true);
                  setGameMessage(`¡Comida recogida! ¡Corre a la salida ${EXIT_EMOJI}!`);
             }
+        }
+
+        const remainingPowerUps = powerUps.filter(p => !arePositionsEqual(playerPosition, p.position));
+        if (remainingPowerUps.length < powerUps.length) {
+            const collectedPowerUps = powerUps.filter(p => arePositionsEqual(playerPosition, p.position));
+            collectedPowerUps.forEach(p => {
+                createParticles(p.position.x * GRID_SIZE + GRID_SIZE / 2, p.position.y * GRID_SIZE + GRID_SIZE / 2, POWERUP_EMOJI, '#A5F3FC');
+                
+                if (p.type === PowerUpType.FREEZE_ENEMIES) {
+                    setEnemiesFrozen(true);
+                    setGameMessage("¡Enemigos Congelados! ❄️");
+                    playSound('collect'); // Or a specific sound
+                    if (freezeTimeoutId) clearTimeout(freezeTimeoutId);
+                    const id = setTimeout(() => {
+                        setEnemiesFrozen(false);
+                        setFreezeTimeoutId(null);
+                        setGameMessage(null);
+                    }, FREEZE_DURATION_MS);
+                    setFreezeTimeoutId(id);
+                }
+            });
+            setPowerUps(remainingPowerUps);
         }
         
         if (!isHiding && !isInvulnerable) {
@@ -624,7 +718,7 @@ const App: React.FC = () => {
             stopMusic();
         }
 
-    }, [gameState, playerPosition, foodItems, enemies, lives, getNextStep, isHiding, allFoodCollected, exitPosition, lastKnownPlayerPosition, hideTimeoutId, racks, getRandomPatrolTarget, isCaptureInProgress, playSound, stopMusic, getEnemyOccupiedCells, isInvulnerable, invulnerabilityTimeoutId, totalFood, level, leaderboard, playerName]);
+    }, [gameState, playerPosition, foodItems, enemies, lives, getNextStep, isHiding, allFoodCollected, exitPosition, lastKnownPlayerPosition, hideTimeoutId, racks, getRandomPatrolTarget, isCaptureInProgress, playSound, stopMusic, getEnemyOccupiedCells, isInvulnerable, invulnerabilityTimeoutId, totalFood, level, leaderboard, playerName, createParticles, powerUps, enemiesFrozen, freezeTimeoutId]);
 
     useEffect(() => {
         if (gameState === GameState.PLAYING) {
@@ -739,6 +833,16 @@ const App: React.FC = () => {
                         </div>
                     </Modal>
                 );
+            case GameState.PAUSED:
+                return (
+                    <Modal title="⏸️ Pausa">
+                        <p className="mb-6">Juego en pausa. Tómate un respiro.</p>
+                         <div className="flex flex-col gap-4">
+                            <button onClick={togglePause} className={buttonClass}>Continuar</button>
+                            <button onClick={returnToMenu} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-red-400 w-full sm:w-auto">Salir al Menú</button>
+                         </div>
+                    </Modal>
+                );
             default:
                 return null;
         }
@@ -819,6 +923,9 @@ const App: React.FC = () => {
                         <div className="whitespace-nowrap">Comida: {FOOD_PER_LEVEL - foodItems.length}/{FOOD_PER_LEVEL}</div>
                         <div className="whitespace-nowrap">🏆: {leaderboard.length > 0 ? `${leaderboard[0].level}/${leaderboard[0].food}` : '0/0'}</div>
                         <div className="flex items-center space-x-2 sm:space-x-4 ml-auto">
+                            <button onClick={togglePause} className="text-lg sm:text-2xl hover:scale-110 transition-transform focus:outline-none" aria-label="Pausar juego">
+                                ⏸️
+                            </button>
                             <button onClick={toggleFullscreen} className="text-lg sm:text-2xl hover:scale-110 transition-transform focus:outline-none" aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
                                 {isFullscreen ? '↘' : '⛶'}
                             </button>
@@ -864,6 +971,20 @@ const App: React.FC = () => {
                                 {foodItems.map(food => (
                                     <div key={food.id} className="absolute text-4xl animate-bounce flex justify-center items-center" style={{ left: food.position.x * GRID_SIZE, top: food.position.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE }}>{food.emoji}</div>
                                 ))}
+                                {powerUps.map(p => (
+                                    <div key={p.id} className="absolute text-4xl animate-pulse flex justify-center items-center" style={{ left: p.position.x * GRID_SIZE, top: p.position.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE }}>{POWERUP_EMOJI}</div>
+                                ))}
+                                {particles.map(p => (
+                                     <div key={p.id} className="absolute text-2xl pointer-events-none" 
+                                         style={{ 
+                                            left: p.x, 
+                                            top: p.y, 
+                                            opacity: p.life,
+                                            transform: `scale(${p.life})`,
+                                         }}>
+                                        {p.emoji}
+                                    </div>
+                                ))}
                                 {enemies.map(enemy => (
                                     <div key={enemy.id} className="absolute transition-all duration-200 ease-linear flex justify-center items-center" 
                                          style={{ 
@@ -872,7 +993,7 @@ const App: React.FC = () => {
                                             width: enemy.type === EnemyType.WORKER ? GRID_SIZE : GRID_SIZE * 2, 
                                             height: enemy.type === EnemyType.WORKER ? GRID_SIZE : GRID_SIZE * 2,
                                          }}>
-                                        {enemy.type === EnemyType.WORKER ? <span className="text-4xl">👷</span> : <ForkliftIcon className="w-full h-full" color={enemy.isBoss ? '#DC2626' : undefined} />}
+                                        {enemy.type === EnemyType.WORKER ? <span className="text-4xl">{enemiesFrozen ? '🥶' : '👷'}</span> : <ForkliftIcon className="w-full h-full" color={enemiesFrozen ? '#A5F3FC' : (enemy.isBoss ? '#DC2626' : undefined)} />}
                                     </div>
                                 ))}
                                 

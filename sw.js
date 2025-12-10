@@ -1,85 +1,59 @@
 
 const CACHE_NAME = 'gato-distribucion-v1';
-const urlsToCache = [
+
+// Assets to cache immediately
+const PRECACHE_ASSETS = [
   '/',
   '/index.html',
-  '/index.tsx',
-  '/App.tsx',
-  '/types.ts',
-  '/constants.ts',
-  '/metadata.json',
-  '/hooks/useAudio.ts',
-  '/components/Modal.tsx',
-  '/components/ForkliftIcon.tsx',
   '/manifest.json',
-  '/icon.svg',
-  'https://cdn.tailwindcss.com',
-  'https://esm.sh/react@^19.1.1',
-  'https://esm.sh/react-dom@^19.1.1/client',
-  'https://esm.sh/react@^19.1.1/jsx-runtime'
+  '/icon.svg'
 ];
 
-self.addEventListener('install', event => {
-  // Realiza la instalación
+self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Cache abierto');
-        return cache.addAll(urlsToCache);
-      })
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(PRECACHE_ASSETS);
+    })
   );
+  self.skipWaiting();
 });
 
-self.addEventListener('activate', event => {
-  const cacheWhitelist = [CACHE_NAME];
+self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then(cacheNames => {
+    caches.keys().then((cacheNames) => {
       return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
             return caches.delete(cacheName);
           }
         })
       );
     })
   );
+  self.clients.claim();
 });
 
-self.addEventListener('fetch', event => {
-  // Solo se manejan las solicitudes GET
-  if (event.request.method !== 'GET') {
-    return;
-  }
+self.addEventListener('fetch', (event) => {
+  // Strategy: Stale-While-Revalidate for most things, but Cache First for assets
+  // Since we don't know the exact hashed filenames of assets in advance in this simple setup,
+  // we will try to fetch from network and cache it, falling back to cache if offline.
   
   event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Si se encuentra en caché, se retorna la respuesta de la caché
-        if (response) {
-          return response;
+    caches.match(event.request).then((cachedResponse) => {
+      const fetchPromise = fetch(event.request).then((networkResponse) => {
+        // Cache valid responses
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, responseToCache);
+            });
         }
-        // Si no, se busca en la red
-        return fetch(event.request).then(
-          response => {
-            // Si la respuesta de la red no es válida, se retorna tal cual
-            if(!response || response.status !== 200) {
-              return response;
-            }
+        return networkResponse;
+      }).catch(() => {
+         // Network failed, nothing to do here as we handle fallback below
+      });
 
-            // Se clona la respuesta para poder almacenarla en caché y retornarla
-            const responseToCache = response.clone();
-
-            caches.open(CACHE_NAME)
-              .then(cache => {
-                // No se cachea el propio service worker
-                if (event.request.url.indexOf('sw.js') === -1) {
-                    cache.put(event.request, responseToCache);
-                }
-              });
-
-            return response;
-          }
-        );
-      })
+      return cachedResponse || fetchPromise;
+    })
   );
 });
