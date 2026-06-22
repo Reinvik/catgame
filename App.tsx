@@ -4,6 +4,7 @@ import { BOARD_WIDTH, BOARD_HEIGHT, GRID_SIZE, INITIAL_LIVES, BASE_GAME_TICK, FO
 import Modal from './components/Modal';
 import ForkliftIcon from './components/ForkliftIcon';
 import { useAudio } from './hooks/useAudio';
+import { supabase } from './supabaseClient';
 
 const arePositionsEqual = (pos1: Position, pos2: Position) => pos1.x === pos2.x && pos1.y === pos2.y;
 
@@ -675,6 +676,33 @@ const App: React.FC = () => {
                         const finalName = playerName.trim() === '' ? 'Gato Anónimo' : playerName;
                         const currentScore = { name: finalName, level, food: totalFood };
 
+                        // Guardado asíncrono en Supabase
+                        const saveScore = async () => {
+                            try {
+                                const { error } = await supabase
+                                    .from('catgame_high_scores')
+                                    .insert([currentScore]);
+                                if (error) throw error;
+                                
+                                // Refrescar leaderboard de Supabase
+                                const { data: freshData, error: fetchError } = await supabase
+                                    .from('catgame_high_scores')
+                                    .select('name, level, food')
+                                    .order('level', { ascending: false })
+                                    .order('food', { ascending: false })
+                                    .limit(10);
+                                if (fetchError) throw fetchError;
+                                if (freshData) {
+                                    setLeaderboard(freshData as HighScoreEntry[]);
+                                }
+                            } catch (err) {
+                                console.error("Error al guardar/recuperar récord en Supabase:", err);
+                            }
+                        };
+
+                        saveScore();
+
+                        // Guardado local (fallback/redundancia)
                         const updatedLeaderboard = [...leaderboard];
                         const existingScoreIndex = updatedLeaderboard.findIndex(score => score.name === finalName);
 

@@ -9,11 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.108.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
+    "pg": "^8.22.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
