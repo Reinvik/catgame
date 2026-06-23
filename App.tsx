@@ -14,17 +14,42 @@ interface DPadProps {
 }
 
 const DPad: React.FC<DPadProps> = ({ onMove }) => {
+  const dpadRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const dpadEl = dpadRef.current;
+    if (!dpadEl) return;
+
+    const preventDefault = (e: TouchEvent) => {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+    };
+
+    // Añadir listeners nativos con passive: false para bloquear el overscroll/bounce en iOS/Android
+    dpadEl.addEventListener('touchstart', preventDefault, { passive: false });
+    dpadEl.addEventListener('touchmove', preventDefault, { passive: false });
+    dpadEl.addEventListener('touchend', preventDefault, { passive: false });
+
+    return () => {
+      dpadEl.removeEventListener('touchstart', preventDefault);
+      dpadEl.removeEventListener('touchmove', preventDefault);
+      dpadEl.removeEventListener('touchend', preventDefault);
+    };
+  }, []);
+
   const handleTouch = (e: React.TouchEvent, direction: Direction) => {
-    e.preventDefault(); // Evita el zoom o el desplazamiento de la página
+    e.preventDefault();
     onMove(direction);
   };
 
-  const buttonClasses = "absolute bg-gray-600/70 rounded-full w-16 h-16 flex justify-center items-center text-3xl text-white active:bg-yellow-500/80 transform active:scale-110 transition-transform select-none";
-  const arrowClasses = "pointer-events-none";
+  const buttonClasses = "absolute bg-slate-800/40 backdrop-blur-md rounded-full w-12 h-12 sm:w-14 sm:h-14 flex justify-center items-center text-xl sm:text-2xl text-slate-300 border border-slate-700/20 active:bg-yellow-500/60 active:text-slate-900 active:border-yellow-400/40 shadow-md transform active:scale-105 active:shadow-[0_0_12px_rgba(234,179,8,0.4)] transition-all duration-150 select-none touch-none";
+  const arrowClasses = "pointer-events-none select-none";
 
   return (
     <div
-      className="fixed bottom-5 left-5 z-[100] w-48 h-48 select-none"
+      ref={dpadRef}
+      className="relative w-40 h-40 select-none mx-auto mt-4 mb-4 landscape:fixed landscape:bottom-6 landscape:left-6 landscape:m-0 landscape:w-40 landscape:h-40 md:fixed md:bottom-8 md:left-8 md:m-0 md:w-44 md:h-44 z-[100] touch-none rounded-full bg-slate-950/20 backdrop-blur-[2px] border border-slate-800/10 shadow-inner"
       aria-label="Controles direccionales"
       role="group"
     >
@@ -32,6 +57,7 @@ const DPad: React.FC<DPadProps> = ({ onMove }) => {
       <button onTouchStart={(e) => handleTouch(e, 'down')} className={buttonClasses} style={{ bottom: 0, left: '50%', transform: 'translateX(-50%)' }} aria-label="Mover hacia abajo"><span className={arrowClasses}>▼</span></button>
       <button onTouchStart={(e) => handleTouch(e, 'left')} className={buttonClasses} style={{ left: 0, top: '50%', transform: 'translateY(-50%)' }} aria-label="Mover hacia la izquierda"><span className={arrowClasses}>◀</span></button>
       <button onTouchStart={(e) => handleTouch(e, 'right')} className={buttonClasses} style={{ right: 0, top: '50%', transform: 'translateY(-50%)' }} aria-label="Mover hacia la derecha"><span className={arrowClasses}>▶</span></button>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-slate-800/20 border border-slate-700/10 backdrop-blur-[1px] pointer-events-none" />
     </div>
   );
 };
@@ -1037,23 +1063,28 @@ const App: React.FC = () => {
     const containerRef = React.useRef<HTMLDivElement>(null);
     const headerRef = React.useRef<HTMLDivElement>(null);
 
+    const handleResize = useCallback(() => {
+        if (containerRef.current && headerRef.current) {
+            const { width: containerWidth, height: containerHeight } = containerRef.current.getBoundingClientRect();
+            const headerHeight = headerRef.current.offsetHeight;
+            
+            // Determinar si es móvil vertical (portrait)
+            const isMobilePortrait = window.innerWidth < 640 && window.innerHeight > window.innerWidth;
+            const dpadHeight = (isTouchDevice && gameState === GameState.PLAYING && isMobilePortrait) ? 180 : 0;
+            
+            const availableHeight = containerHeight - headerHeight - dpadHeight;
+
+            const gameWidth = BOARD_WIDTH * GRID_SIZE;
+            const gameHeight = BOARD_HEIGHT * GRID_SIZE;
+            
+            const scaleX = containerWidth / gameWidth;
+            const scaleY = availableHeight / gameHeight;
+            
+            setScale(Math.max(0.1, Math.min(scaleX, scaleY, 1)));
+        }
+    }, [gameState, isTouchDevice]);
+
     useEffect(() => {
-        const handleResize = () => {
-            if (containerRef.current && headerRef.current) {
-                const { width: containerWidth, height: containerHeight } = containerRef.current.getBoundingClientRect();
-                const headerHeight = headerRef.current.offsetHeight;
-                const availableHeight = containerHeight - headerHeight;
-
-                const gameWidth = BOARD_WIDTH * GRID_SIZE;
-                const gameHeight = BOARD_HEIGHT * GRID_SIZE;
-                
-                const scaleX = containerWidth / gameWidth;
-                const scaleY = availableHeight / gameHeight;
-                
-                setScale(Math.max(0.1, Math.min(scaleX, scaleY, 1)));
-            }
-        };
-
         handleResize();
         const resizeObserver = new ResizeObserver(handleResize);
         if (containerRef.current) {
@@ -1064,7 +1095,7 @@ const App: React.FC = () => {
         }
         
         return () => resizeObserver.disconnect();
-    }, []);
+    }, [handleResize]);
 
     const scaledWidth = BOARD_WIDTH * GRID_SIZE;
     const scaledHeight = BOARD_HEIGHT * GRID_SIZE;
@@ -1074,7 +1105,7 @@ const App: React.FC = () => {
 
     return (
         <main className="flex flex-col items-center justify-center h-dvh w-screen bg-gray-900 text-white p-2 sm:p-4 font-sans overflow-hidden">
-            <header className="text-center mb-2 sm:mb-4 shrink-0 font-sans">
+            <header className={`text-center mb-2 sm:mb-4 shrink-0 font-sans ${isTouchDevice && gameState === GameState.PLAYING ? 'hidden' : 'block'}`}>
                 <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight bg-gradient-to-r from-yellow-300 via-orange-400 to-yellow-500 bg-clip-text text-transparent filter drop-shadow-md select-none">
                     🐾 Gato en el Centro de Distribución 🐾
                 </h1>
@@ -1096,25 +1127,25 @@ const App: React.FC = () => {
                         visibility: gameState === GameState.NOT_STARTED || gameState === GameState.CREDITS ? 'hidden' : 'visible'
                     }}
                 >
-                    <div ref={headerRef} className="flex justify-between items-center backdrop-blur-md bg-slate-900/90 text-white p-3 rounded-t-xl border-t border-x border-slate-700/40 shadow-2xl text-xs sm:text-sm font-bold w-full flex-wrap gap-2" style={{ width: gameWrapperWidth }}>
-                        <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                            <div className="whitespace-nowrap bg-blue-500/10 text-blue-300 border border-blue-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-inner">
-                                <span className="text-[10px] text-blue-400 font-extrabold">NIVEL</span>
-                                <span className="font-extrabold text-blue-100">{level}</span>
+                    <div ref={headerRef} className="flex justify-between items-center backdrop-blur-md bg-slate-900/90 text-white p-2 sm:p-3 rounded-t-xl border-t border-x border-slate-700/40 shadow-2xl text-xs sm:text-sm font-bold w-full flex-wrap gap-1.5 sm:gap-2" style={{ width: gameWrapperWidth }}>
+                        <div className="flex items-center space-x-1.5 sm:space-x-2 flex-wrap gap-y-1">
+                            <div className="whitespace-nowrap bg-blue-500/10 text-blue-300 border border-blue-500/20 px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-lg flex items-center gap-1 sm:gap-1.5 shadow-inner">
+                                <span className="text-[8px] sm:text-[10px] text-blue-400 font-extrabold">NIVEL</span>
+                                <span className="font-extrabold text-blue-100 text-xs sm:text-sm">{level}</span>
                             </div>
-                            <div className="whitespace-nowrap bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-inner">
-                                <span className="text-[10px] text-emerald-400 font-extrabold">COMIDA</span>
-                                <span className="font-extrabold text-emerald-100">{FOOD_PER_LEVEL - foodItems.length} / {FOOD_PER_LEVEL}</span>
+                            <div className="whitespace-nowrap bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-lg flex items-center gap-1 sm:gap-1.5 shadow-inner">
+                                <span className="text-[8px] sm:text-[10px] text-emerald-400 font-extrabold">COMIDA</span>
+                                <span className="font-extrabold text-emerald-100 text-xs sm:text-sm">{FOOD_PER_LEVEL - foodItems.length} / {FOOD_PER_LEVEL}</span>
                             </div>
-                            <div className="whitespace-nowrap bg-amber-500/10 text-amber-300 border border-amber-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-inner">
-                                <span className="text-[10px] text-amber-400 font-extrabold">RÉCORD 🏆</span>
-                                <span className="font-extrabold text-amber-100">{leaderboard.length > 0 ? `${leaderboard[0].level}-${leaderboard[0].food}` : '0-0'}</span>
+                            <div className="whitespace-nowrap bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-lg flex items-center gap-1 sm:gap-1.5 shadow-inner">
+                                <span className="text-[8px] sm:text-[10px] text-amber-400 font-extrabold">RÉCORD 🏆</span>
+                                <span className="font-extrabold text-amber-100 text-xs sm:text-sm">{leaderboard.length > 0 ? `${leaderboard[0].level}-${leaderboard[0].food}` : '0-0'}</span>
                             </div>
                         </div>
                         
-                        <div className="flex items-center space-x-1 select-none whitespace-nowrap bg-slate-950/60 px-3 py-1.5 rounded-lg border border-slate-800">
-                            <span className="text-[9px] text-slate-400 font-extrabold tracking-wider mr-1.5">ESTAMINA:</span>
-                            <div className="flex space-x-0.5 sm:space-x-1">
+                        <div className="flex items-center space-x-1 select-none whitespace-nowrap bg-slate-950/60 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg border border-slate-800">
+                            <span className="text-[8px] sm:text-[9px] text-slate-400 font-extrabold tracking-wider mr-1 sm:mr-1.5">ESTAMINA:</span>
+                            <div className="flex space-x-0.5">
                                 {Array.from({ length: MAX_SPRINT_CHARGES }).map((_, i) => {
                                     const isActive = i < Math.floor(sprintCharges);
                                     let energyColor = 'bg-emerald-500';
@@ -1124,7 +1155,7 @@ const App: React.FC = () => {
                                     return (
                                         <div 
                                             key={i} 
-                                            className={`w-1.5 sm:w-2.5 h-3 rounded-sm transition-all duration-200 ${
+                                            className={`w-1 sm:w-2 h-2 sm:h-3 rounded-sm transition-all duration-200 ${
                                                 isExhausted 
                                                     ? 'bg-rose-500 animate-pulse border border-rose-400/20 shadow-[0_0_8px_rgba(244,63,94,0.4)]' 
                                                     : isActive 
@@ -1136,7 +1167,7 @@ const App: React.FC = () => {
                                 })}
                             </div>
                             {isExhausted && (
-                                <span className="text-[8px] sm:text-[9px] text-rose-400 bg-rose-950/30 border border-rose-500/20 px-1.5 py-0.5 rounded ml-2 animate-pulse font-extrabold uppercase tracking-wide">
+                                <span className="text-[7px] sm:text-[9px] text-rose-400 bg-rose-950/30 border border-rose-500/20 px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded ml-1 sm:ml-2 animate-pulse font-extrabold uppercase tracking-wide">
                                     Cansado
                                 </span>
                             )}
@@ -1144,19 +1175,19 @@ const App: React.FC = () => {
 
                         <div className="flex items-center space-x-2 sm:space-x-4 ml-auto">
                             <div className="flex space-x-1">
-                                <button onClick={togglePause} className="text-base sm:text-lg p-1.5 bg-slate-800/80 hover:bg-slate-700/80 rounded-md border border-slate-700/40 transition-colors focus:outline-none" aria-label="Pausar juego">
+                                <button onClick={togglePause} className="text-xs sm:text-base p-1 sm:p-1.5 bg-slate-800/80 hover:bg-slate-700/80 rounded-md border border-slate-700/40 transition-colors focus:outline-none" aria-label="Pausar juego">
                                     ⏸️
                                 </button>
-                                <button onClick={toggleFullscreen} className="text-base sm:text-lg p-1.5 bg-slate-800/80 hover:bg-slate-700/80 rounded-md border border-slate-700/40 transition-colors focus:outline-none" aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
+                                <button onClick={toggleFullscreen} className="text-xs sm:text-base p-1 sm:p-1.5 bg-slate-800/80 hover:bg-slate-700/80 rounded-md border border-slate-700/40 transition-colors focus:outline-none" aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
                                     {isFullscreen ? '↘' : '⛶'}
                                 </button>
-                                <button onClick={toggleMute} className="text-base sm:text-lg p-1.5 bg-slate-800/80 hover:bg-slate-700/80 rounded-md border border-slate-700/40 transition-colors focus:outline-none" aria-label={isMuted ? 'Activar sonido' : 'Silenciar'}>
+                                <button onClick={toggleMute} className="text-xs sm:text-base p-1 sm:p-1.5 bg-slate-800/80 hover:bg-slate-700/80 rounded-md border border-slate-700/40 transition-colors focus:outline-none" aria-label={isMuted ? 'Activar sonido' : 'Silenciar'}>
                                     {isMuted ? '🔇' : '🔊'}
                                 </button>
                             </div>
-                            <div className="flex items-center space-x-1 bg-rose-500/10 border border-rose-500/20 px-2 py-1 rounded-lg shadow-inner">
+                            <div className="flex items-center space-x-0.5 sm:space-x-1 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-lg shadow-inner">
                             {Array.from({ length: lives }).map((_, i) => (
-                               <span key={i} className="text-red-500 text-sm sm:text-base animate-pulse">❤️</span>
+                               <span key={i} className="text-red-500 text-xs sm:text-base animate-pulse">❤️</span>
                             ))}
                             </div>
                         </div>
@@ -1259,6 +1290,12 @@ const App: React.FC = () => {
                     margin: 0;
                     padding: 0;
                     overflow: hidden;
+                    touch-action: none;
+                    overscroll-behavior: none;
+                    -webkit-tap-highlight-color: transparent;
+                    user-select: none;
+                    -webkit-user-select: none;
+                    -webkit-touch-callout: none;
                 }
                 .bg-checkered {
                     background-image: linear-gradient(45deg, #5a6678 25%, transparent 25%), linear-gradient(-45deg, #5a6678 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #5a6678 75%), linear-gradient(-45deg, transparent 75%, #5a6678 75%);
