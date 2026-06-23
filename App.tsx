@@ -848,10 +848,10 @@ const App: React.FC = () => {
             return () => clearInterval(interval);
         }
     }, [gameState, gameLoop]);
-    
+
     const renderModal = () => {
-        const buttonClass = "bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold py-3 px-6 rounded-lg text-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-yellow-300 w-full sm:w-auto";
-        const bossButtonClass = "bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-red-400 w-full sm:w-auto";
+        const buttonClass = "bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 text-slate-900 font-extrabold py-3.5 px-8 rounded-xl text-lg transition-all duration-300 transform hover:scale-[1.03] active:scale-[0.98] shadow-lg hover:shadow-yellow-500/20 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-offset-2 focus:ring-offset-slate-900 w-full sm:w-auto select-none";
+        const bossButtonClass = "bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-extrabold py-3.5 px-8 rounded-xl text-lg transition-all duration-300 transform hover:scale-[1.03] active:scale-[0.98] shadow-lg hover:shadow-red-500/20 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-slate-900 w-full sm:w-auto select-none";
 
         switch (gameState) {
             case GameState.NOT_STARTED:
@@ -866,29 +866,57 @@ const App: React.FC = () => {
                               onChange={(e) => setPlayerName(e.target.value)}
                               placeholder="Gato Anónimo"
                               maxLength={15}
-                              className="w-full p-2 rounded bg-gray-800 border border-gray-600 text-white text-center focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                              className="w-full max-w-sm mx-auto p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-white text-center font-bold text-lg placeholder-slate-600 focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 transition-all shadow-inner"
                             />
                         </div>
                         {leaderboard.length > 0 && (
-                            <div className="mb-4 p-3 bg-gray-800 rounded-lg border border-yellow-500">
-                                <h3 className="text-xl font-bold text-yellow-300 mb-2">🏆 El Gato Más Glotón 🏆</h3>
-                                <ol className="text-left text-sm pr-2">
-                                    {leaderboard.map((score, index) => (
-                                    <li key={index} className="flex justify-between p-1 border-b border-gray-700 last:border-b-0">
-                                        <span className="font-bold mr-2">{index + 1}. {score.name}</span>
-                                        <span className="text-gray-300">Nvl: {score.level} / Comida: {score.food}</span>
-                                    </li>
-                                    ))}
+                            <div className="mb-4 p-4 bg-slate-950/40 rounded-2xl border border-slate-800 shadow-inner">
+                                <h3 className="text-lg font-black text-amber-400 mb-3 flex items-center justify-center gap-2 tracking-wide">
+                                    🏆 SALÓN DE LA FAMA 🏆
+                                </h3>
+                                <ol className="text-left text-sm space-y-1.5 max-h-[200px] overflow-y-auto pr-1">
+                                    {leaderboard.map((score, index) => {
+                                        let medal = '';
+                                        let rankBg = 'bg-slate-900/60 border-slate-800/50';
+                                        let nameColor = 'text-slate-200';
+                                        
+                                        if (index === 0) {
+                                            medal = '🥇';
+                                            rankBg = 'bg-amber-500/10 border-amber-500/20';
+                                            nameColor = 'text-amber-300 font-extrabold';
+                                        } else if (index === 1) {
+                                            medal = '🥈';
+                                            rankBg = 'bg-slate-300/10 border-slate-300/20';
+                                            nameColor = 'text-slate-300 font-extrabold';
+                                        } else if (index === 2) {
+                                            medal = '🥉';
+                                            rankBg = 'bg-amber-700/10 border-amber-700/20';
+                                            nameColor = 'text-amber-600 font-extrabold';
+                                        }
+                                        
+                                        return (
+                                            <li key={index} className={`flex justify-between items-center p-2 rounded-xl border ${rankBg} transition-all duration-150 hover:scale-[1.01]`}>
+                                                <span className={`truncate mr-2 ${nameColor}`}>
+                                                    {medal || `${index + 1}.`} {score.name}
+                                                </span>
+                                                <span className="text-slate-400 font-semibold shrink-0 text-xs">
+                                                    Nivel <strong className="text-slate-200">{score.level}</strong> • Comida <strong className="text-slate-200">{score.food}</strong>
+                                                </span>
+                                            </li>
+                                        );
+                                    })}
                                 </ol>
                             </div>
                         )}
-                        <p>¡Consigue <strong>{FOOD_PER_LEVEL} comidas</strong> 🐟 para poder escapar 🚚!</p>
-                        <p>Usa las estanterías 🧱 para <strong>esconderte</strong>.</p>
-                        <p className="flex items-center justify-center gap-2">
-                           <ForkliftIcon className="w-12 h-12" /> 
-                           <span>¡Cuidado con las traspaletas!</span>
+                        <div className="text-slate-300 text-sm space-y-1">
+                            <p>¡Consigue <strong>{FOOD_PER_LEVEL} comidas</strong> 🐟 para poder escapar 🚚!</p>
+                            <p>Usa las estanterías 🧱 para <strong>esconderte</strong> de los guardias.</p>
+                        </div>
+                        <p className="flex items-center justify-center gap-2 text-slate-400 text-sm mt-2">
+                           <ForkliftIcon className="w-8 h-8 text-rose-500" /> 
+                           <span>¡Cuidado con las veloces traspaletas!</span>
                         </p>
-                        <div className="flex flex-col sm:flex-row gap-4 justify-center mt-8">
+                        <div className="flex flex-col sm:flex-row gap-4 justify-center mt-6">
                             <button onClick={startGame} className={buttonClass}>¡Empezar a Jugar!</button>
                             <button onClick={startBossFight} className={bossButtonClass}>Jefe Final</button>
                         </div>
@@ -897,8 +925,8 @@ const App: React.FC = () => {
             case GameState.BOSS_LEVEL_START:
                 return (
                     <Modal title="🚨 ¡ALERTA DE JEFE! 🚨">
-                         <p className="text-2xl italic text-red-400">"¡Maldito gato, te atraparé!"</p>
-                         <p>El jefe de turno te perseguirá sin descanso en su traspaleta roja.</p>
+                         <p className="text-2xl italic text-red-400 font-bold">"¡Maldito gato, te atraparé!"</p>
+                         <p className="text-slate-300">El jefe de turno te perseguirá sin descanso montado en su traspaleta roja.</p>
                          <div className="mt-6">
                             <button onClick={() => { setGameState(GameState.PLAYING); playMusic(); }} className={buttonClass}>
                                 ¡Comenzar Nivel 10!
@@ -909,9 +937,9 @@ const App: React.FC = () => {
             case GameState.CREDITS:
                 return (
                     <Modal title="🎉 ¡VICTORIA! 🎉">
-                        <p className="text-2xl mb-4">¡Lo lograste! El gato es libre.</p>
+                        <p className="text-2xl font-extrabold text-yellow-400">¡Lo lograste! El gato es libre.</p>
                         <p className="text-5xl my-4 animate-bounce">🐱👑</p>
-                        <p className="text-xl italic text-gray-300 mb-6">Tu hazaña será recordada en el almacén.</p>
+                        <p className="text-lg italic text-slate-300 mb-6">Tu hazaña y tu gran apetito serán recordados por siempre.</p>
                         <div className="mt-6">
                             <button onClick={returnToMenu} className={buttonClass}>
                                 Volver al Menú
@@ -922,8 +950,8 @@ const App: React.FC = () => {
             case GameState.LEVEL_COMPLETE:
                 return (
                     <Modal title={`¡Nivel ${level} Superado!`} >
-                        <p>¡El gato escapó! Pero el próximo almacén es más grande...</p>
-                        <p className="text-5xl my-4">🎉</p>
+                        <p className="text-slate-200">¡El gato escapó con éxito! Pero el próximo almacén es más peligroso...</p>
+                        <p className="text-5xl my-4 animate-pulse">🚚💨</p>
                         <div className="mt-6">
                            <button onClick={nextLevel} className={buttonClass}>
                               { level < 9 ? `Ir al Nivel ${level + 1}`: '¡Ir al Jefe Final!'}
@@ -935,16 +963,22 @@ const App: React.FC = () => {
                  const finalName = playerName.trim() === '' ? 'Gato Anónimo' : playerName;
                 return (
                     <Modal title="😿 Fin del Juego">
-                        <p>¡Oh no! El gato ha sido atrapado y escoltado fuera.</p>
-                        <p>Alcanzaste el nivel <strong>{level}</strong> y recogiste <strong>{totalFood}</strong> comidas.</p>
+                        <p className="text-xl text-rose-400 font-bold">¡Oh no! El gato ha sido atrapado y escoltado fuera.</p>
+                        <p className="text-slate-300">Alcanzaste el nivel <strong className="text-white">{level}</strong> y recolectaste <strong className="text-white">{totalFood}</strong> comidas.</p>
                         {leaderboard.length > 0 && (
-                             <div className="mt-4 p-3 bg-gray-600 rounded-lg">
-                                <h3 className="text-lg font-bold text-yellow-300">🏆 El Gato Más Glotón 🏆</h3>
-                                <ol className="text-left text-sm pr-2">
+                            <div className="mt-4 p-4 bg-slate-950/40 rounded-2xl border border-slate-800 shadow-inner">
+                                <h3 className="text-base font-black text-amber-400 mb-3 flex items-center justify-center gap-2 tracking-wide">
+                                    🏆 EL GATO MÁS GLOTÓN 🏆
+                                </h3>
+                                <ol className="text-left text-sm space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
                                   {leaderboard.map((score, index) => (
-                                     <li key={index} className={`flex justify-between p-1 rounded ${score.name === finalName && score.level === level && score.food === totalFood ? 'bg-yellow-500/30' : ''}`}>
-                                         <span>{index + 1}. {score.name}</span>
-                                         <span>Nvl: {score.level} / Com: {score.food}</span>
+                                     <li key={index} className={`flex justify-between items-center p-2 rounded-xl border ${score.name === finalName && score.level === level && score.food === totalFood ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-slate-900/60 border-slate-800/50'} transition-all duration-150`}>
+                                         <span className={`truncate mr-2 ${score.name === finalName && score.level === level && score.food === totalFood ? 'text-yellow-400 font-extrabold' : 'text-slate-200'}`}>
+                                             {index + 1}. {score.name}
+                                         </span>
+                                         <span className="text-slate-400 font-semibold shrink-0 text-xs">
+                                             Nvl <strong className="text-slate-200">{score.level}</strong> • Com <strong className="text-slate-200">{score.food}</strong>
+                                         </span>
                                      </li>
                                   ))}
                                 </ol>
@@ -958,10 +992,10 @@ const App: React.FC = () => {
             case GameState.PAUSED:
                 return (
                     <Modal title="⏸️ Pausa">
-                        <p className="mb-6">Juego en pausa. Tómate un respiro.</p>
-                         <div className="flex flex-col gap-4">
+                        <p className="mb-6 text-slate-300">Juego en pausa. Tómate un respiro para recuperar energía.</p>
+                         <div className="flex flex-col sm:flex-row gap-4 justify-center">
                             <button onClick={togglePause} className={buttonClass}>Continuar</button>
-                            <button onClick={returnToMenu} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-red-400 w-full sm:w-auto">Salir al Menú</button>
+                            <button onClick={returnToMenu} className="bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-extrabold py-3.5 px-8 rounded-xl text-lg transition-all duration-300 transform hover:scale-[1.03] active:scale-[0.98] shadow-lg hover:shadow-red-500/20 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-slate-900 w-full sm:w-auto select-none">Salir al Menú</button>
                          </div>
                     </Modal>
                 );
@@ -1017,12 +1051,12 @@ const App: React.FC = () => {
     const gameWrapperHeight = scaledHeight * scale;
 
     return (
-        <main className="flex flex-col items-center justify-center h-dvh w-screen bg-gray-900 text-white p-2 sm:p-4 font-mono overflow-hidden">
+        <main className="flex flex-col items-center justify-center h-dvh w-screen bg-gray-900 text-white p-2 sm:p-4 font-sans overflow-hidden">
             <header className="text-center mb-2 sm:mb-4 shrink-0 font-sans">
-                <h1 className="text-3xl sm:text-5xl font-extrabold text-yellow-400 tracking-wider [text-shadow:_2px_2px_4px_rgb(0_0_0_/_50%)]">
+                <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight bg-gradient-to-r from-yellow-300 via-orange-400 to-yellow-500 bg-clip-text text-transparent filter drop-shadow-md select-none">
                     🐾 Gato en el Centro de Distribución 🐾
                 </h1>
-                <p className="text-lg sm:text-xl text-gray-300 italic mt-2 tracking-wide">
+                <p className="text-lg sm:text-xl text-gray-300 italic mt-2 tracking-wide font-light">
                     ¡Esquiva, come, escóndete y escapa!
                 </p>
             </header>
@@ -1035,55 +1069,72 @@ const App: React.FC = () => {
                 {renderModal()}
                 
                 <div 
-                    className="bg-gray-800 p-1 sm:p-2 rounded-lg shadow-lg flex flex-col items-center justify-center transition-all duration-300"
+                    className="bg-slate-800/30 backdrop-blur-sm p-1.5 sm:p-2.5 rounded-2xl border border-slate-700/30 shadow-2xl flex flex-col items-center justify-center transition-all duration-300"
                     style={{ 
                         visibility: gameState === GameState.NOT_STARTED || gameState === GameState.CREDITS ? 'hidden' : 'visible'
                     }}
                 >
-                    <div ref={headerRef} className="flex justify-between items-center bg-gray-900 text-white p-2 rounded-t-md text-xs sm:text-base md:text-xl font-bold w-full flex-wrap gap-x-2 gap-y-1" style={{ width: gameWrapperWidth }}>
-                        <div className="whitespace-nowrap">Nivel: {level}</div>
-                        <div className="whitespace-nowrap">Comida: {FOOD_PER_LEVEL - foodItems.length}/{FOOD_PER_LEVEL}</div>
-                        <div className="whitespace-nowrap">🏆: {leaderboard.length > 0 ? `${leaderboard[0].level}/${leaderboard[0].food}` : '0/0'}</div>
+                    <div ref={headerRef} className="flex justify-between items-center backdrop-blur-md bg-slate-900/90 text-white p-3 rounded-t-xl border-t border-x border-slate-700/40 shadow-2xl text-xs sm:text-sm font-bold w-full flex-wrap gap-2" style={{ width: gameWrapperWidth }}>
+                        <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                            <div className="whitespace-nowrap bg-blue-500/10 text-blue-300 border border-blue-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-inner">
+                                <span className="text-[10px] text-blue-400 font-extrabold">NIVEL</span>
+                                <span className="font-extrabold text-blue-100">{level}</span>
+                            </div>
+                            <div className="whitespace-nowrap bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-inner">
+                                <span className="text-[10px] text-emerald-400 font-extrabold">COMIDA</span>
+                                <span className="font-extrabold text-emerald-100">{FOOD_PER_LEVEL - foodItems.length} / {FOOD_PER_LEVEL}</span>
+                            </div>
+                            <div className="whitespace-nowrap bg-amber-500/10 text-amber-300 border border-amber-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-inner">
+                                <span className="text-[10px] text-amber-400 font-extrabold">RÉCORD 🏆</span>
+                                <span className="font-extrabold text-amber-100">{leaderboard.length > 0 ? `${leaderboard[0].level}-${leaderboard[0].food}` : '0-0'}</span>
+                            </div>
+                        </div>
                         
-                        <div className="flex items-center space-x-1 select-none whitespace-nowrap bg-gray-800/40 px-2 py-0.5 rounded border border-gray-700/30">
-                            <span className="text-[10px] sm:text-xs text-gray-400 mr-1">ENERGÍA:</span>
-                            {Array.from({ length: MAX_SPRINT_CHARGES }).map((_, i) => {
-                                const isActive = i < Math.floor(sprintCharges);
-                                return (
-                                    <span 
-                                        key={i} 
-                                        className={`text-xs sm:text-sm md:text-base transition-all duration-150 ${
-                                            isExhausted 
-                                                ? 'text-red-500 animate-pulse' 
-                                                : isActive 
-                                                    ? 'text-yellow-400 drop-shadow-[0_0_2px_rgba(234,179,8,0.7)]' 
-                                                    : 'text-gray-700 opacity-30'
-                                        }`}
-                                    >
-                                        🐾
-                                    </span>
-                                );
-                            })}
+                        <div className="flex items-center space-x-1 select-none whitespace-nowrap bg-slate-950/60 px-3 py-1.5 rounded-lg border border-slate-800">
+                            <span className="text-[9px] text-slate-400 font-extrabold tracking-wider mr-1.5">ESTAMINA:</span>
+                            <div className="flex space-x-0.5 sm:space-x-1">
+                                {Array.from({ length: MAX_SPRINT_CHARGES }).map((_, i) => {
+                                    const isActive = i < Math.floor(sprintCharges);
+                                    let energyColor = 'bg-emerald-500';
+                                    if (sprintCharges <= 3) energyColor = 'bg-rose-500';
+                                    else if (sprintCharges <= 6) energyColor = 'bg-amber-500';
+                                    
+                                    return (
+                                        <div 
+                                            key={i} 
+                                            className={`w-1.5 sm:w-2.5 h-3 rounded-sm transition-all duration-200 ${
+                                                isExhausted 
+                                                    ? 'bg-rose-500 animate-pulse border border-rose-400/20 shadow-[0_0_8px_rgba(244,63,94,0.4)]' 
+                                                    : isActive 
+                                                        ? `${energyColor} shadow-[0_0_6px_rgba(16,185,129,0.2)]` 
+                                                        : 'bg-slate-800 opacity-20 border border-slate-700/30'
+                                            }`}
+                                        />
+                                    );
+                                })}
+                            </div>
                             {isExhausted && (
-                                <span className="text-[8px] sm:text-[10px] text-red-500 bg-red-950/50 border border-red-500/50 px-1 rounded ml-1 animate-pulse font-extrabold uppercase">
+                                <span className="text-[8px] sm:text-[9px] text-rose-400 bg-rose-950/30 border border-rose-500/20 px-1.5 py-0.5 rounded ml-2 animate-pulse font-extrabold uppercase tracking-wide">
                                     Cansado
                                 </span>
                             )}
                         </div>
 
                         <div className="flex items-center space-x-2 sm:space-x-4 ml-auto">
-                            <button onClick={togglePause} className="text-lg sm:text-2xl hover:scale-110 transition-transform focus:outline-none" aria-label="Pausar juego">
-                                ⏸️
-                            </button>
-                            <button onClick={toggleFullscreen} className="text-lg sm:text-2xl hover:scale-110 transition-transform focus:outline-none" aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
-                                {isFullscreen ? '↘' : '⛶'}
-                            </button>
-                            <button onClick={toggleMute} className="text-lg sm:text-2xl hover:scale-110 transition-transform focus:outline-none" aria-label={isMuted ? 'Activar sonido' : 'Silenciar'}>
-                                {isMuted ? '🔇' : '🔊'}
-                            </button>
-                            <div className="flex items-center space-x-1 sm:space-x-2">
+                            <div className="flex space-x-1">
+                                <button onClick={togglePause} className="text-base sm:text-lg p-1.5 bg-slate-800/80 hover:bg-slate-700/80 rounded-md border border-slate-700/40 transition-colors focus:outline-none" aria-label="Pausar juego">
+                                    ⏸️
+                                </button>
+                                <button onClick={toggleFullscreen} className="text-base sm:text-lg p-1.5 bg-slate-800/80 hover:bg-slate-700/80 rounded-md border border-slate-700/40 transition-colors focus:outline-none" aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
+                                    {isFullscreen ? '↘' : '⛶'}
+                                </button>
+                                <button onClick={toggleMute} className="text-base sm:text-lg p-1.5 bg-slate-800/80 hover:bg-slate-700/80 rounded-md border border-slate-700/40 transition-colors focus:outline-none" aria-label={isMuted ? 'Activar sonido' : 'Silenciar'}>
+                                    {isMuted ? '🔇' : '🔊'}
+                                </button>
+                            </div>
+                            <div className="flex items-center space-x-1 bg-rose-500/10 border border-rose-500/20 px-2 py-1 rounded-lg shadow-inner">
                             {Array.from({ length: lives }).map((_, i) => (
-                               <span key={i} className="text-red-500 text-lg sm:text-2xl animate-pulse">❤️</span>
+                               <span key={i} className="text-red-500 text-sm sm:text-base animate-pulse">❤️</span>
                             ))}
                             </div>
                         </div>
@@ -1091,7 +1142,7 @@ const App: React.FC = () => {
                     
                     <div
                       key={key}
-                      className="relative bg-gray-600 bg-checkered overflow-hidden"
+                      className="relative bg-gray-600 bg-checkered overflow-hidden border-x border-b border-slate-700/40 shadow-2xl rounded-b-xl"
                       style={{ 
                           width: gameWrapperWidth, 
                           height: gameWrapperHeight,
@@ -1228,6 +1279,6 @@ const App: React.FC = () => {
             `}</style>
         </main>
     );
-};
+}
 
 export default App;
