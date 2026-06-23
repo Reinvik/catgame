@@ -694,6 +694,19 @@ const App: React.FC = () => {
             const collectedItems = foodItems.filter(food => arePositionsEqual(playerPosition, food.position));
             collectedItems.forEach(item => {
                 createParticles(item.position.x * GRID_SIZE + GRID_SIZE / 2, item.position.y * GRID_SIZE + GRID_SIZE / 2, item.emoji);
+                
+                // Determinar cargas a regenerar según el tipo de comida
+                let sprintRegen = 1;
+                if (item.emoji === '🥫') sprintRegen = 2;
+                if (item.emoji === '🍖') sprintRegen = 3;
+
+                setSprintCharges(prev => {
+                    const nextCharges = Math.min(6, prev + sprintRegen);
+                    if (isExhausted && nextCharges >= 1) {
+                        setIsExhausted(false);
+                    }
+                    return nextCharges;
+                });
             });
 
             setFoodItems(remainingFood);
