@@ -73,25 +73,79 @@ const App: React.FC = () => {
     const [totalFood, setTotalFood] = useState(0);
     const [leaderboard, setLeaderboard] = useState<HighScoreEntry[]>([]);
 
+    // --- Mecánica de Sprint y Cansancio ---
+    const [sprintCharges, setSprintCharges] = useState<number>(6);
+    const [isExhausted, setIsExhausted] = useState<boolean>(false);
+    const [lastRegenTime, setLastRegenTime] = useState<number>(Date.now());
 
-    // Cargar puntuación al inicio
+    // Cargar puntuación al inicio desde Supabase con fallback a localStorage
     useEffect(() => {
-        try {
-            const savedScores = localStorage.getItem('leaderboard');
-            if (savedScores) {
-                const parsedScores = JSON.parse(savedScores) as HighScoreEntry[];
+        const fetchScores = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('catgame_high_scores')
+                    .select('name, level, food')
+                    .order('level', { ascending: false })
+                    .order('food', { ascending: false })
+                    .limit(10);
                 
-                parsedScores.sort((a, b) => {
-                    if (b.level !== a.level) return b.level - a.level;
-                    return b.food - a.food;
-                });
-
-                setLeaderboard(parsedScores.slice(0, 10));
+                if (error) throw error;
+                if (data) {
+                    setLeaderboard(data as HighScoreEntry[]);
+                }
+            } catch (error) {
+                console.error("Fallo al cargar la tabla de récords desde Supabase, intentando localStorage...", error);
+                try {
+                    const savedScores = localStorage.getItem('leaderboard');
+                    if (savedScores) {
+                        const parsedScores = JSON.parse(savedScores) as HighScoreEntry[];
+                        parsedScores.sort((a, b) => {
+                            if (b.level !== a.level) return b.level - a.level;
+                            return b.food - a.food;
+                        });
+                        setLeaderboard(parsedScores.slice(0, 10));
+                    }
+                } catch (localError) {
+                    console.error("Fallo al cargar la tabla de récords desde localStorage", localError);
+                }
             }
-        } catch (error) {
-            console.error("Fallo al cargar la tabla de récords desde localStorage", error);
-        }
+        };
+
+        fetchScores();
     }, []);
+
+    // Intervalo periódico de regeneración de energía (Sprint)
+    useEffect(() => {
+        if (gameState !== GameState.PLAYING) return;
+
+        const regenInterval = setInterval(() => {
+            setSprintCharges(prev => {
+                if (prev >= 6) {
+                    setLastRegenTime(Date.now());
+                    return 6;
+                }
+                
+                const now = Date.now();
+                const elapsed = now - lastRegenTime;
+                const rate = isExhausted ? 400 : 300; // 400ms por carga si está cansado, 300ms normal
+                
+                if (elapsed >= rate) {
+                    const chargesToGain = Math.floor(elapsed / rate);
+                    const nextCharges = Math.min(6, prev + chargesToGain);
+                    
+                    if (isExhausted && nextCharges >= 1) {
+                        setIsExhausted(false);
+                    }
+                    
+                    setLastRegenTime(now - (elapsed % rate));
+                    return nextCharges;
+                }
+                return prev;
+            });
+        }, 50); // Comprobación cada 50ms para mantener la interfaz de usuario sincronizada en tiempo real
+
+        return () => clearInterval(regenInterval);
+    }, [gameState, lastRegenTime, isExhausted]);
 
     useEffect(() => {
         setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
@@ -377,6 +431,33 @@ const App: React.FC = () => {
 
     const handlePlayerMove = useCallback((direction: Direction) => {
         if (gameState !== GameState.PLAYING || isCaptureInProgress) return;
+
+        const now = Date.now();
+        let currentCharges = sprintCharges;
+        const elapsed = now - lastRegenTime;
+        const rate = isExhausted ? 400 : 300;
+
+        // Calcular regeneración acumulada en el momento del movimiento
+        if (elapsed >= rate) {
+            const chargesToGain = Math.floor(elapsed / rate);
+            currentCharges = Math.min(6, currentCharges + chargesToGain);
+        }
+
+        // Si no tiene suficiente energía (menos de 1 carga), bloquea el movimiento
+        if (currentCharges < 1) {
+            return;
+        }
+
+        // Deducir 1 carga
+        const nextCharges = currentCharges - 1;
+        setSprintCharges(nextCharges);
+        setLastRegenTime(now); // Reiniciamos el tiempo para la próxima regeneración desde el movimiento
+
+        // Entrar en estado cansado (fatiga) si la energía cae a 0 (menor a 1)
+        if (nextCharges < 1) {
+            setIsExhausted(true);
+        }
+
         setPlayerPosition(prev => {
             let { x, y } = prev;
             if (direction === 'up') y--;
@@ -412,7 +493,7 @@ const App: React.FC = () => {
             }
             return newPos;
         });
-    }, [gameState, isRack, hideTimeoutId, isWall, isCaptureInProgress, playSound]);
+    }, [gameState, isRack, hideTimeoutId, isWall, isCaptureInProgress, playSound, sprintCharges, lastRegenTime, isExhausted]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -950,6 +1031,33 @@ const App: React.FC = () => {
                         <div className="whitespace-nowrap">Nivel: {level}</div>
                         <div className="whitespace-nowrap">Comida: {FOOD_PER_LEVEL - foodItems.length}/{FOOD_PER_LEVEL}</div>
                         <div className="whitespace-nowrap">🏆: {leaderboard.length > 0 ? `${leaderboard[0].level}/${leaderboard[0].food}` : '0/0'}</div>
+                        
+                        <div className="flex items-center space-x-1 select-none whitespace-nowrap bg-gray-800/40 px-2 py-0.5 rounded border border-gray-700/30">
+                            <span className="text-[10px] sm:text-xs text-gray-400 mr-1">ENERGÍA:</span>
+                            {Array.from({ length: 6 }).map((_, i) => {
+                                const isActive = i < Math.floor(sprintCharges);
+                                return (
+                                    <span 
+                                        key={i} 
+                                        className={`text-xs sm:text-sm md:text-base transition-all duration-150 ${
+                                            isExhausted 
+                                                ? 'text-red-500 animate-pulse' 
+                                                : isActive 
+                                                    ? 'text-yellow-400 drop-shadow-[0_0_2px_rgba(234,179,8,0.7)]' 
+                                                    : 'text-gray-700 opacity-30'
+                                        }`}
+                                    >
+                                        🐾
+                                    </span>
+                                );
+                            })}
+                            {isExhausted && (
+                                <span className="text-[8px] sm:text-[10px] text-red-500 bg-red-950/50 border border-red-500/50 px-1 rounded ml-1 animate-pulse font-extrabold uppercase">
+                                    Cansado
+                                </span>
+                            )}
+                        </div>
+
                         <div className="flex items-center space-x-2 sm:space-x-4 ml-auto">
                             <button onClick={togglePause} className="text-lg sm:text-2xl hover:scale-110 transition-transform focus:outline-none" aria-label="Pausar juego">
                                 ⏸️
