@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Position, Enemy, EnemyType, GameState, Direction, FoodItem, Rack, EnemyState, HighScoreEntry, PowerUp, PowerUpType, Particle } from './types';
-import { BOARD_WIDTH, BOARD_HEIGHT, GRID_SIZE, INITIAL_LIVES, BASE_GAME_TICK, FOOD_PER_LEVEL, FOOD_EMOJIS, ENEMY_BASE_COUNT, HIDING_DURATION_MS, EXIT_EMOJI, WORKER_SPEED, PALLET_JACK_SPEED, WORKER_VISION_RANGE, FREEZE_DURATION_MS, POWERUP_EMOJI } from './constants';
+import { BOARD_WIDTH, BOARD_HEIGHT, GRID_SIZE, INITIAL_LIVES, BASE_GAME_TICK, FOOD_PER_LEVEL, FOOD_EMOJIS, ENEMY_BASE_COUNT, HIDING_DURATION_MS, EXIT_EMOJI, WORKER_SPEED, PALLET_JACK_SPEED, WORKER_VISION_RANGE, FREEZE_DURATION_MS, POWERUP_EMOJI, MAX_SPRINT_CHARGES } from './constants';
 import Modal from './components/Modal';
 import ForkliftIcon from './components/ForkliftIcon';
 import { useAudio } from './hooks/useAudio';
@@ -74,7 +74,7 @@ const App: React.FC = () => {
     const [leaderboard, setLeaderboard] = useState<HighScoreEntry[]>([]);
 
     // --- Mecánica de Sprint y Cansancio ---
-    const [sprintCharges, setSprintCharges] = useState<number>(6);
+    const [sprintCharges, setSprintCharges] = useState<number>(MAX_SPRINT_CHARGES);
     const [isExhausted, setIsExhausted] = useState<boolean>(false);
     const [lastRegenTime, setLastRegenTime] = useState<number>(Date.now());
 
@@ -120,9 +120,9 @@ const App: React.FC = () => {
 
         const regenInterval = setInterval(() => {
             setSprintCharges(prev => {
-                if (prev >= 6) {
+                if (prev >= MAX_SPRINT_CHARGES) {
                     setLastRegenTime(Date.now());
-                    return 6;
+                    return MAX_SPRINT_CHARGES;
                 }
                 
                 const now = Date.now();
@@ -131,7 +131,7 @@ const App: React.FC = () => {
                 
                 if (elapsed >= rate) {
                     const chargesToGain = Math.floor(elapsed / rate);
-                    const nextCharges = Math.min(6, prev + chargesToGain);
+                    const nextCharges = Math.min(MAX_SPRINT_CHARGES, prev + chargesToGain);
                     
                     if (isExhausted && nextCharges >= 1) {
                         setIsExhausted(false);
@@ -440,7 +440,7 @@ const App: React.FC = () => {
         // Calcular regeneración acumulada en el momento del movimiento
         if (elapsed >= rate) {
             const chargesToGain = Math.floor(elapsed / rate);
-            currentCharges = Math.min(6, currentCharges + chargesToGain);
+            currentCharges = Math.min(MAX_SPRINT_CHARGES, currentCharges + chargesToGain);
         }
 
         // Si no tiene suficiente energía (menos de 1 carga), bloquea el movimiento
@@ -701,7 +701,7 @@ const App: React.FC = () => {
                 if (item.emoji === '🍖') sprintRegen = 3;
 
                 setSprintCharges(prev => {
-                    const nextCharges = Math.min(6, prev + sprintRegen);
+                    const nextCharges = Math.min(MAX_SPRINT_CHARGES, prev + sprintRegen);
                     if (isExhausted && nextCharges >= 1) {
                         setIsExhausted(false);
                     }
@@ -1047,7 +1047,7 @@ const App: React.FC = () => {
                         
                         <div className="flex items-center space-x-1 select-none whitespace-nowrap bg-gray-800/40 px-2 py-0.5 rounded border border-gray-700/30">
                             <span className="text-[10px] sm:text-xs text-gray-400 mr-1">ENERGÍA:</span>
-                            {Array.from({ length: 6 }).map((_, i) => {
+                            {Array.from({ length: MAX_SPRINT_CHARGES }).map((_, i) => {
                                 const isActive = i < Math.floor(sprintCharges);
                                 return (
                                     <span 

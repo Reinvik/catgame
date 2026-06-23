@@ -15,3 +15,4 @@ export const HIDING_DURATION_MS = 2000; // 2 seconds
 export const EXIT_EMOJI = '🚚';
 export const FREEZE_DURATION_MS = 5000;
 export const POWERUP_EMOJI = '⏳';
+export const MAX_SPRINT_CHARGES = 10;
