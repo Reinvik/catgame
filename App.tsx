@@ -773,10 +773,32 @@ const App: React.FC = () => {
                         // Guardado asíncrono en Supabase
                         const saveScore = async () => {
                             try {
-                                const { error } = await supabase
+                                // Buscar si ya existe un registro con ese nombre
+                                const { data: existing, error: searchError } = await supabase
                                     .from('catgame_high_scores')
-                                    .insert([currentScore]);
-                                if (error) throw error;
+                                    .select('id, level, food')
+                                    .eq('name', finalName)
+                                    .maybeSingle();
+                                
+                                if (searchError) throw searchError;
+
+                                if (existing) {
+                                    // Si existe, actualizar si el nuevo puntaje es superior
+                                    const isNewRecord = level > existing.level || (level === existing.level && totalFood > existing.food);
+                                    if (isNewRecord) {
+                                        const { error: updateError } = await supabase
+                                            .from('catgame_high_scores')
+                                            .update({ level, food: totalFood })
+                                            .eq('id', existing.id);
+                                        if (updateError) throw updateError;
+                                    }
+                                } else {
+                                    // Si no existe, insertar
+                                    const { error: insertError } = await supabase
+                                        .from('catgame_high_scores')
+                                        .insert([currentScore]);
+                                    if (insertError) throw insertError;
+                                }
                                 
                                 // Refrescar leaderboard de Supabase
                                 const { data: freshData, error: fetchError } = await supabase
