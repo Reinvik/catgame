@@ -91,8 +91,18 @@ const App: React.FC = () => {
     const [invulnerabilityTimeoutId, setInvulnerabilityTimeoutId] = useState<ReturnType<typeof setTimeout> | null>(null);
     const [isTouchDevice, setIsTouchDevice] = useState<boolean>(false);
     const [isFullscreen, setIsFullscreen] = useState<boolean>(!!document.fullscreenElement);
+    const [isScanning, setIsScanning] = useState<boolean>(false);
 
     const { playSound, playMusic, stopMusic, isMuted, toggleMute } = useAudio();
+
+    const triggerScan = () => {
+        if (isScanning) return;
+        setIsScanning(true);
+        playSound('scan');
+        setTimeout(() => {
+            setIsScanning(false);
+        }, 150);
+    };
     
     // --- Sistema de Puntuación Histórica ---
     const [playerName, setPlayerName] = useState<string>('');
@@ -1062,17 +1072,34 @@ const App: React.FC = () => {
     const [scale, setScale] = useState(1);
     const containerRef = React.useRef<HTMLDivElement>(null);
     const headerRef = React.useRef<HTMLDivElement>(null);
+    const keyboardRef = React.useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const keyboardEl = keyboardRef.current;
+        if (!keyboardEl) return;
+
+        const preventDefault = (e: TouchEvent) => {
+            if (e.cancelable) {
+                e.preventDefault();
+            }
+        };
+
+        keyboardEl.addEventListener('touchstart', preventDefault, { passive: false });
+        keyboardEl.addEventListener('touchmove', preventDefault, { passive: false });
+        keyboardEl.addEventListener('touchend', preventDefault, { passive: false });
+
+        return () => {
+            keyboardEl.removeEventListener('touchstart', preventDefault);
+            keyboardEl.removeEventListener('touchmove', preventDefault);
+            keyboardEl.removeEventListener('touchend', preventDefault);
+        };
+    }, []);
 
     const handleResize = useCallback(() => {
         if (containerRef.current && headerRef.current) {
             const { width: containerWidth, height: containerHeight } = containerRef.current.getBoundingClientRect();
             const headerHeight = headerRef.current.offsetHeight;
-            
-            // Determinar si es móvil vertical (portrait)
-            const isMobilePortrait = window.innerWidth < 640 && window.innerHeight > window.innerWidth;
-            const dpadHeight = (isTouchDevice && gameState === GameState.PLAYING && isMobilePortrait) ? 180 : 0;
-            
-            const availableHeight = containerHeight - headerHeight - dpadHeight;
+            const availableHeight = containerHeight - headerHeight;
 
             const gameWidth = BOARD_WIDTH * GRID_SIZE;
             const gameHeight = BOARD_HEIGHT * GRID_SIZE;
@@ -1082,7 +1109,7 @@ const App: React.FC = () => {
             
             setScale(Math.max(0.1, Math.min(scaleX, scaleY, 1)));
         }
-    }, [gameState, isTouchDevice]);
+    }, []);
 
     useEffect(() => {
         handleResize();
@@ -1097,192 +1124,257 @@ const App: React.FC = () => {
         return () => resizeObserver.disconnect();
     }, [handleResize]);
 
-    const scaledWidth = BOARD_WIDTH * GRID_SIZE;
-    const scaledHeight = BOARD_HEIGHT * GRID_SIZE;
-    
-    const gameWrapperWidth = scaledWidth * scale;
-    const gameWrapperHeight = scaledHeight * scale;
-
     return (
-        <main className="flex flex-col items-center justify-center h-dvh w-screen bg-gray-900 text-white p-2 sm:p-4 font-sans overflow-hidden">
-            <header className={`text-center mb-2 sm:mb-4 shrink-0 font-sans ${isTouchDevice && gameState === GameState.PLAYING ? 'hidden' : 'block'}`}>
-                <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight bg-gradient-to-r from-yellow-300 via-orange-400 to-yellow-500 bg-clip-text text-transparent filter drop-shadow-md select-none">
-                    🐾 Gato en el Centro de Distribución 🐾
-                </h1>
-                <p className="text-lg sm:text-xl text-gray-300 italic mt-2 tracking-wide font-light">
-                    ¡Esquiva, come, escóndete y escapa!
-                </p>
-            </header>
-            
-            <div 
-                className="flex-grow w-full flex items-center justify-center relative"
-                ref={containerRef}
-                style={{ minHeight: 0 }}
-            >
-                {renderModal()}
+        <main className="flex flex-col items-center justify-center h-dvh w-screen bg-slate-950 text-white font-sans overflow-hidden bg-radial-industrial p-0 sm:p-4">
+            {/* PDA FÍSICA DE LOGÍSTICA */}
+            <div className="pda-device flex flex-col justify-between w-full h-full max-h-full sm:w-[410px] sm:h-[820px] sm:max-h-[95vh] sm:rounded-[36px] sm:border-[10px] sm:border-slate-950 sm:bg-slate-900 sm:shadow-2xl relative overflow-hidden shrink-0">
                 
+                {/* Barra superior de hardware de la PDA */}
+                <div className="h-8 bg-slate-950 flex items-center justify-between px-5 text-[9px] font-mono tracking-widest text-slate-500 select-none border-b border-slate-900 shrink-0">
+                    <span className="flex items-center gap-1.5"><span className="text-yellow-500 font-black">NEXUS</span> CAT-10</span>
+                    <div className="flex items-center space-x-2.5">
+                        <span className="text-[8px] opacity-60">BATT 98%</span>
+                        <div className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                            gameState === GameState.GAME_OVER 
+                                ? 'bg-rose-500 animate-pulse shadow-[0_0_8px_#f43f5e]' 
+                                : isScanning 
+                                    ? 'bg-yellow-400 animate-ping shadow-[0_0_10px_#f59e0b]'
+                                    : 'bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]'
+                        }`} />
+                    </div>
+                </div>
+
+                {/* Pantalla digital de la PDA */}
                 <div 
-                    className="bg-slate-800/30 backdrop-blur-sm p-1.5 sm:p-2.5 rounded-2xl border border-slate-700/30 shadow-2xl flex flex-col items-center justify-center transition-all duration-300"
-                    style={{ 
-                        visibility: gameState === GameState.NOT_STARTED || gameState === GameState.CREDITS ? 'hidden' : 'visible'
-                    }}
+                    className="flex-grow w-full flex flex-col bg-slate-950 relative overflow-hidden p-1.5 sm:p-2.5"
+                    ref={containerRef}
+                    style={{ minHeight: 0 }}
                 >
-                    <div ref={headerRef} className="flex justify-between items-center backdrop-blur-md bg-slate-900/90 text-white p-2 sm:p-3 rounded-t-xl border-t border-x border-slate-700/40 shadow-2xl text-xs sm:text-sm font-bold w-full flex-wrap gap-1.5 sm:gap-2" style={{ width: gameWrapperWidth }}>
-                        <div className="flex items-center space-x-1.5 sm:space-x-2 flex-wrap gap-y-1">
-                            <div className="whitespace-nowrap bg-blue-500/10 text-blue-300 border border-blue-500/20 px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-lg flex items-center gap-1 sm:gap-1.5 shadow-inner">
-                                <span className="text-[8px] sm:text-[10px] text-blue-400 font-extrabold">NIVEL</span>
-                                <span className="font-extrabold text-blue-100 text-xs sm:text-sm">{level}</span>
+                    {renderModal()}
+                    
+                    {/* Contenedor del juego escalado */}
+                    <div 
+                        className="w-full flex-grow flex flex-col items-center justify-center transition-all duration-300 relative"
+                        style={{ 
+                            visibility: gameState === GameState.NOT_STARTED || gameState === GameState.CREDITS ? 'hidden' : 'visible',
+                            minHeight: 0
+                        }}
+                    >
+                        {/* Header de estadísticas */}
+                        <div ref={headerRef} className="flex justify-between items-center backdrop-blur-md bg-slate-900/90 text-white p-2 sm:p-3 rounded-t-xl border-t border-x border-slate-700/40 shadow-2xl text-xs sm:text-sm font-bold w-full flex-wrap gap-1.5 sm:gap-2" style={{ width: gameWrapperWidth }}>
+                            <div className="flex items-center space-x-1.5 sm:space-x-2 flex-wrap gap-y-1">
+                                <div className="whitespace-nowrap bg-blue-500/10 text-blue-300 border border-blue-500/20 px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-lg flex items-center gap-1 sm:gap-1.5 shadow-inner">
+                                    <span className="text-[8px] sm:text-[10px] text-blue-400 font-extrabold">NIVEL</span>
+                                    <span className="font-extrabold text-blue-100 text-xs sm:text-sm">{level}</span>
+                                </div>
+                                <div className="whitespace-nowrap bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-lg flex items-center gap-1 sm:gap-1.5 shadow-inner">
+                                    <span className="text-[8px] sm:text-[10px] text-emerald-400 font-extrabold">COMIDA</span>
+                                    <span className="font-extrabold text-emerald-100 text-xs sm:text-sm">{FOOD_PER_LEVEL - foodItems.length} / {FOOD_PER_LEVEL}</span>
+                                </div>
+                                <div className="whitespace-nowrap bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-lg flex items-center gap-1 sm:gap-1.5 shadow-inner">
+                                    <span className="text-[8px] sm:text-[10px] text-amber-400 font-extrabold">RÉCORD 🏆</span>
+                                    <span className="font-extrabold text-amber-100 text-xs sm:text-sm">{leaderboard.length > 0 ? `${leaderboard[0].level}-${leaderboard[0].food}` : '0-0'}</span>
+                                </div>
                             </div>
-                            <div className="whitespace-nowrap bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-lg flex items-center gap-1 sm:gap-1.5 shadow-inner">
-                                <span className="text-[8px] sm:text-[10px] text-emerald-400 font-extrabold">COMIDA</span>
-                                <span className="font-extrabold text-emerald-100 text-xs sm:text-sm">{FOOD_PER_LEVEL - foodItems.length} / {FOOD_PER_LEVEL}</span>
-                            </div>
-                            <div className="whitespace-nowrap bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-lg flex items-center gap-1 sm:gap-1.5 shadow-inner">
-                                <span className="text-[8px] sm:text-[10px] text-amber-400 font-extrabold">RÉCORD 🏆</span>
-                                <span className="font-extrabold text-amber-100 text-xs sm:text-sm">{leaderboard.length > 0 ? `${leaderboard[0].level}-${leaderboard[0].food}` : '0-0'}</span>
+                            
+                            <div className="flex items-center space-x-1 select-none whitespace-nowrap bg-slate-950/60 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg border border-slate-800">
+                                <span className="text-[8px] sm:text-[9px] text-slate-400 font-extrabold tracking-wider mr-1 sm:mr-1.5">ESTAMINA:</span>
+                                <div className="flex space-x-0.5">
+                                    {Array.from({ length: MAX_SPRINT_CHARGES }).map((_, i) => {
+                                        const isActive = i < Math.floor(sprintCharges);
+                                        let energyColor = 'bg-emerald-500';
+                                        if (sprintCharges <= 3) energyColor = 'bg-rose-500';
+                                        else if (sprintCharges <= 6) energyColor = 'bg-amber-500';
+                                        
+                                        return (
+                                            <div 
+                                                key={i} 
+                                                className={`w-1 sm:w-2 h-2 sm:h-3 rounded-sm transition-all duration-200 ${
+                                                    isExhausted 
+                                                        ? 'bg-rose-500 animate-pulse border border-rose-400/20 shadow-[0_0_8px_rgba(244,63,94,0.4)]' 
+                                                        : isActive 
+                                                            ? `${energyColor} shadow-[0_0_6px_rgba(16,185,129,0.2)]` 
+                                                            : 'bg-slate-800 opacity-20 border border-slate-700/30'
+                                                }`}
+                                            />
+                                        );
+                                    })}
+                                </div>
+                                {isExhausted && (
+                                    <span className="text-[7px] sm:text-[9px] text-rose-400 bg-rose-950/30 border border-rose-500/20 px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded ml-1 sm:ml-2 animate-pulse font-extrabold uppercase tracking-wide">
+                                        Cansado
+                                    </span>
+                                )}
                             </div>
                         </div>
                         
-                        <div className="flex items-center space-x-1 select-none whitespace-nowrap bg-slate-950/60 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg border border-slate-800">
-                            <span className="text-[8px] sm:text-[9px] text-slate-400 font-extrabold tracking-wider mr-1 sm:mr-1.5">ESTAMINA:</span>
-                            <div className="flex space-x-0.5">
-                                {Array.from({ length: MAX_SPRINT_CHARGES }).map((_, i) => {
-                                    const isActive = i < Math.floor(sprintCharges);
-                                    let energyColor = 'bg-emerald-500';
-                                    if (sprintCharges <= 3) energyColor = 'bg-rose-500';
-                                    else if (sprintCharges <= 6) energyColor = 'bg-amber-500';
-                                    
-                                    return (
-                                        <div 
-                                            key={i} 
-                                            className={`w-1 sm:w-2 h-2 sm:h-3 rounded-sm transition-all duration-200 ${
-                                                isExhausted 
-                                                    ? 'bg-rose-500 animate-pulse border border-rose-400/20 shadow-[0_0_8px_rgba(244,63,94,0.4)]' 
-                                                    : isActive 
-                                                        ? `${energyColor} shadow-[0_0_6px_rgba(16,185,129,0.2)]` 
-                                                        : 'bg-slate-800 opacity-20 border border-slate-700/30'
-                                            }`}
-                                        />
-                                    );
-                                })}
-                            </div>
-                            {isExhausted && (
-                                <span className="text-[7px] sm:text-[9px] text-rose-400 bg-rose-950/30 border border-rose-500/20 px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded ml-1 sm:ml-2 animate-pulse font-extrabold uppercase tracking-wide">
-                                    Cansado
-                                </span>
-                            )}
-                        </div>
-
-                        <div className="flex items-center space-x-2 sm:space-x-4 ml-auto">
-                            <div className="flex space-x-1">
-                                <button onClick={togglePause} className="text-xs sm:text-base p-1 sm:p-1.5 bg-slate-800/80 hover:bg-slate-700/80 rounded-md border border-slate-700/40 transition-colors focus:outline-none" aria-label="Pausar juego">
-                                    ⏸️
-                                </button>
-                                <button onClick={toggleFullscreen} className="text-xs sm:text-base p-1 sm:p-1.5 bg-slate-800/80 hover:bg-slate-700/80 rounded-md border border-slate-700/40 transition-colors focus:outline-none" aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
-                                    {isFullscreen ? '↘' : '⛶'}
-                                </button>
-                                <button onClick={toggleMute} className="text-xs sm:text-base p-1 sm:p-1.5 bg-slate-800/80 hover:bg-slate-700/80 rounded-md border border-slate-700/40 transition-colors focus:outline-none" aria-label={isMuted ? 'Activar sonido' : 'Silenciar'}>
-                                    {isMuted ? '🔇' : '🔊'}
-                                </button>
-                            </div>
-                            <div className="flex items-center space-x-0.5 sm:space-x-1 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-lg shadow-inner">
-                            {Array.from({ length: lives }).map((_, i) => (
-                               <span key={i} className="text-red-500 text-xs sm:text-base animate-pulse">❤️</span>
-                            ))}
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div
-                      key={key}
-                      className="relative bg-gray-600 bg-checkered overflow-hidden border-x border-b border-slate-700/40 shadow-2xl rounded-b-xl"
-                      style={{ 
-                          width: gameWrapperWidth, 
-                          height: gameWrapperHeight,
-                      }}
-                    >
-                        <div style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: scaledWidth,
-                            height: scaledHeight,
-                            transform: `scale(${scale})`,
-                            transformOrigin: 'top left',
-                        }}>
-                            {gameMessage && <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-black/60 text-white px-4 py-2 rounded-lg z-20 text-center animate-pulse">{gameMessage}</div>}
-                            
-                            {(gameState !== GameState.NOT_STARTED && gameState !== GameState.CREDITS) && (
-                              <>
-                                {loadingDockPositions.map((pos, i) => (
-                                    <div key={`dock-${i}`} className="absolute bg-gray-700/80 border-l-4 border-yellow-400" style={{ left: pos.x * GRID_SIZE, top: pos.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE, boxSizing: 'border-box' }}></div>
-                                ))}
-                                {racks.map((rack, i) => (
-                                     <div key={`rack-${i}`} className="absolute bg-gray-700 border-t border-gray-500" style={{ left: rack.x * GRID_SIZE, top: rack.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE, boxSizing: 'border-box' }}></div>
-                                ))}
-                                <div className="absolute text-6xl z-10 flex justify-center items-center" style={{ left: exitPosition.x * GRID_SIZE, top: exitPosition.y * GRID_SIZE, width: GRID_SIZE * 2, height: GRID_SIZE * 2 }}>{EXIT_EMOJI}</div>
-                                {foodItems.map(food => (
-                                    <div key={food.id} className="absolute text-4xl animate-bounce flex justify-center items-center" style={{ left: food.position.x * GRID_SIZE, top: food.position.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE }}>{food.emoji}</div>
-                                ))}
-                                {powerUps.map(p => (
-                                    <div key={p.id} className="absolute text-4xl animate-pulse flex justify-center items-center" style={{ left: p.position.x * GRID_SIZE, top: p.position.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE }}>{POWERUP_EMOJI}</div>
-                                ))}
-                                {particles.map(p => (
-                                     <div key={p.id} className="absolute text-2xl pointer-events-none" 
-                                         style={{ 
-                                            left: p.x, 
-                                            top: p.y, 
-                                            opacity: p.life,
-                                            transform: `scale(${p.life})`,
-                                         }}>
-                                        {p.emoji}
-                                    </div>
-                                ))}
-                                {enemies.map(enemy => (
-                                    <div key={enemy.id} className="absolute transition-all duration-200 ease-linear flex justify-center items-center" 
-                                         style={{ 
-                                            left: enemy.position.x * GRID_SIZE, 
-                                            top: enemy.position.y * GRID_SIZE, 
-                                            width: enemy.type === EnemyType.WORKER ? GRID_SIZE : GRID_SIZE * 2, 
-                                            height: enemy.type === EnemyType.WORKER ? GRID_SIZE : GRID_SIZE * 2,
-                                         }}>
-                                        {enemy.type === EnemyType.WORKER ? <span className="text-4xl">{enemiesFrozen ? '🥶' : '👷'}</span> : <ForkliftIcon className="w-full h-full" color={enemiesFrozen ? '#A5F3FC' : (enemy.isBoss ? '#DC2626' : undefined)} />}
-                                    </div>
-                                ))}
-                                
-                                {!isCaptureInProgress ? (
-                                     <div className={`absolute transition-transform duration-200 ease-out flex justify-center items-center ${isHiding ? 'opacity-50' : 'opacity-100'} ${isInvulnerable ? 'animate-blink' : ''}`} style={{ 
-                                        width: GRID_SIZE, 
-                                        height: GRID_SIZE,
-                                        transform: `translate(${playerPosition.x * GRID_SIZE}px, ${playerPosition.y * GRID_SIZE}px)`
-                                     }}>
-                                        <span className="text-4xl">🐱</span>
-                                     </div>
-                                ) : capturedPosition && (
-                                    <div
-                                        className="absolute z-30 capture-animation-container"
-                                        style={{
-                                            '--start-x': `${capturedPosition.x * GRID_SIZE}px`,
-                                            '--start-y': `${capturedPosition.y * GRID_SIZE}px`,
-                                            '--end-x': `${exitPosition.x * GRID_SIZE}px`,
-                                            '--end-y': `${exitPosition.y * GRID_SIZE}px`,
-                                        } as React.CSSProperties}
-                                    >
-                                        <div className="absolute text-5xl" style={{transform: 'translate(-12px, -20px)'}}>✋</div>
-                                        <div className="absolute text-4xl" style={{transform: 'translate(-8px, -8px)'}}>😿</div>
-                                    </div>
+                        {/* Tablero checkered */}
+                        <div
+                          key={key}
+                          className="relative bg-gray-600 bg-checkered overflow-hidden border-x border-b border-slate-700/40 shadow-2xl rounded-b-xl"
+                          style={{ 
+                              width: gameWrapperWidth, 
+                              height: gameWrapperHeight,
+                          }}
+                        >
+                            <div style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: scaledWidth,
+                                height: scaledHeight,
+                                transform: `scale(${scale})`,
+                                transformOrigin: 'top left',
+                            }}>
+                                {gameMessage && <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-black/60 text-white px-4 py-2 rounded-lg z-20 text-center animate-pulse">{gameMessage}</div>}
+                                {isScanning && (
+                                    <div className="absolute top-1/2 left-0 w-full h-[3px] bg-red-500 shadow-[0_0_8px_#ef4444] z-30 animate-pulse pointer-events-none" />
                                 )}
-                              </>
-                            )}
+                                
+                                {(gameState !== GameState.NOT_STARTED && gameState !== GameState.CREDITS) && (
+                                  <>
+                                    {loadingDockPositions.map((pos, i) => (
+                                        <div key={`dock-${i}`} className="absolute bg-gray-700/80 border-l-4 border-yellow-400" style={{ left: pos.x * GRID_SIZE, top: pos.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE, boxSizing: 'border-box' }}></div>
+                                    ))}
+                                    {racks.map((rack, i) => (
+                                         <div key={`rack-${i}`} className="absolute bg-gray-700 border-t border-gray-500" style={{ left: rack.x * GRID_SIZE, top: rack.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE, boxSizing: 'border-box' }}></div>
+                                    ))}
+                                    <div className="absolute text-6xl z-10 flex justify-center items-center" style={{ left: exitPosition.x * GRID_SIZE, top: exitPosition.y * GRID_SIZE, width: GRID_SIZE * 2, height: GRID_SIZE * 2 }}>{EXIT_EMOJI}</div>
+                                    {foodItems.map(food => (
+                                        <div key={food.id} className="absolute text-4xl animate-bounce flex justify-center items-center" style={{ left: food.position.x * GRID_SIZE, top: food.position.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE }}>{food.emoji}</div>
+                                    ))}
+                                    {powerUps.map(p => (
+                                        <div key={p.id} className="absolute text-4xl animate-pulse flex justify-center items-center" style={{ left: p.position.x * GRID_SIZE, top: p.position.y * GRID_SIZE, width: GRID_SIZE, height: GRID_SIZE }}>{POWERUP_EMOJI}</div>
+                                    ))}
+                                    {particles.map(p => (
+                                         <div key={p.id} className="absolute text-2xl pointer-events-none" 
+                                             style={{ 
+                                                left: p.x, 
+                                                top: p.y, 
+                                                opacity: p.life,
+                                                transform: `scale(${p.life})`,
+                                             }}>
+                                            {p.emoji}
+                                        </div>
+                                    ))}
+                                    {enemies.map(enemy => (
+                                        <div key={enemy.id} className="absolute transition-all duration-200 ease-linear flex justify-center items-center" 
+                                             style={{ 
+                                                left: enemy.position.x * GRID_SIZE, 
+                                                top: enemy.position.y * GRID_SIZE, 
+                                                width: enemy.type === EnemyType.WORKER ? GRID_SIZE : GRID_SIZE * 2, 
+                                                height: enemy.type === EnemyType.WORKER ? GRID_SIZE : GRID_SIZE * 2,
+                                             }}>
+                                            {enemy.type === EnemyType.WORKER ? <span className="text-4xl">{enemiesFrozen ? '🥶' : '👷'}</span> : <ForkliftIcon className="w-full h-full" color={enemiesFrozen ? '#A5F3FC' : (enemy.isBoss ? '#DC2626' : undefined)} />}
+                                        </div>
+                                    ))}
+                                    
+                                    {!isCaptureInProgress ? (
+                                         <div className={`absolute transition-transform duration-200 ease-out flex justify-center items-center ${isHiding ? 'opacity-50' : 'opacity-100'} ${isInvulnerable ? 'animate-blink' : ''}`} style={{ 
+                                            width: GRID_SIZE, 
+                                            height: GRID_SIZE,
+                                            transform: `translate(${playerPosition.x * GRID_SIZE}px, ${playerPosition.y * GRID_SIZE}px)`
+                                         }}>
+                                            <span className="text-4xl">🐱</span>
+                                         </div>
+                                    ) : capturedPosition && (
+                                        <div
+                                            className="absolute z-30 capture-animation-container"
+                                            style={{
+                                                '--start-x': `${capturedPosition.x * GRID_SIZE}px`,
+                                                '--start-y': `${capturedPosition.y * GRID_SIZE}px`,
+                                                '--end-x': `${exitPosition.x * GRID_SIZE}px`,
+                                                '--end-y': `${exitPosition.y * GRID_SIZE}px`,
+                                            } as React.CSSProperties}
+                                        >
+                                            <div className="absolute text-5xl" style={{transform: 'translate(-12px, -20px)'}}>✋</div>
+                                            <div className="absolute text-4xl" style={{transform: 'translate(-8px, -8px)'}}>😿</div>
+                                        </div>
+                                    )}
+                                  </>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
+
+                {/* Botonera física inferior de la PDA */}
+                <div 
+                    ref={keyboardRef} 
+                    className="bg-slate-900 border-t border-slate-950 p-3 pb-5 flex flex-col items-center justify-center shrink-0 select-none landscape:hidden w-full relative z-[90]"
+                >
+                    {/* Botones de Función/Sistema */}
+                    <div className="w-full flex justify-between px-3 mb-4 max-w-[340px]">
+                        <button onClick={togglePause} className="pda-key pda-key-sys px-3 py-1.5 text-[9px] text-slate-200 rounded font-mono font-bold tracking-tight bg-slate-800 border border-slate-950 focus:outline-none">F1 PAUSE</button>
+                        <button onClick={toggleMute} className="pda-key pda-key-sys px-3 py-1.5 text-[9px] text-slate-200 rounded font-mono font-bold tracking-tight bg-slate-800 border border-slate-950 focus:outline-none">{isMuted ? 'F2 VOL+' : 'F2 VOL-'}</button>
+                        <button onClick={returnToMenu} className="pda-key pda-key-sys px-3 py-1.5 text-[9px] text-slate-200 rounded font-mono font-bold tracking-tight bg-slate-800 border border-slate-950 focus:outline-none">F3 MENU</button>
+                    </div>
+                    
+                    {/* Cruceta direccional y botón SCAN amarillo */}
+                    <div className="relative w-36 h-36 flex items-center justify-center">
+                        <div className="absolute w-32 h-32 rounded-full bg-slate-950/45 border border-slate-800 shadow-[inset_0_3px_6px_rgba(0,0,0,0.8)]" />
+                        
+                        <button 
+                            onTouchStart={(e) => { e.preventDefault(); handlePlayerMove('up'); }} 
+                            onMouseDown={() => handlePlayerMove('up')} 
+                            className="pda-key pda-key-up absolute top-0 left-1/2 -translate-x-1/2 w-11 h-11 rounded-t-xl text-slate-300 text-xl flex items-center justify-center select-none font-extrabold focus:outline-none touch-none" 
+                            style={{ top: 0, left: '50%', transform: 'translateX(-50%)' }}
+                            aria-label="Mover arriba"
+                        >
+                            ▲
+                        </button>
+                        <button 
+                            onTouchStart={(e) => { e.preventDefault(); handlePlayerMove('down'); }} 
+                            onMouseDown={() => handlePlayerMove('down')} 
+                            className="pda-key pda-key-down absolute bottom-0 left-1/2 -translate-x-1/2 w-11 h-11 rounded-b-xl text-slate-300 text-xl flex items-center justify-center select-none font-extrabold focus:outline-none touch-none" 
+                            style={{ bottom: 0, left: '50%', transform: 'translateX(-50%)' }}
+                            aria-label="Mover abajo"
+                        >
+                            ▼
+                        </button>
+                        <button 
+                            onTouchStart={(e) => { e.preventDefault(); handlePlayerMove('left'); }} 
+                            onMouseDown={() => handlePlayerMove('left')} 
+                            className="pda-key pda-key-left absolute left-0 top-1/2 -translate-y-1/2 w-11 h-11 rounded-l-xl text-slate-300 text-xl flex items-center justify-center select-none font-extrabold focus:outline-none touch-none" 
+                            style={{ left: 0, top: '50%', transform: 'translateY(-50%)' }}
+                            aria-label="Mover izquierda"
+                        >
+                            ◀
+                        </button>
+                        <button 
+                            onTouchStart={(e) => { e.preventDefault(); handlePlayerMove('right'); }} 
+                            onMouseDown={() => handlePlayerMove('right')} 
+                            className="pda-key pda-key-right absolute right-0 top-1/2 -translate-y-1/2 w-11 h-11 rounded-r-xl text-slate-300 text-xl flex items-center justify-center select-none font-extrabold focus:outline-none touch-none" 
+                            style={{ right: 0, top: '50%', transform: 'translateY(-50%)' }}
+                            aria-label="Mover derecha"
+                        >
+                            ▶
+                        </button>
+                        
+                        {/* Gran botón SCAN amarillo */}
+                        <button 
+                            onClick={triggerScan}
+                            className="pda-key pda-key-yellow absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full text-slate-950 font-black text-[10px] tracking-tighter flex items-center justify-center shadow-md select-none focus:outline-none touch-none"
+                            style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+                            aria-label="Escanear"
+                        >
+                            SCAN
+                        </button>
+                    </div>
+                </div>
             </div>
-            {isTouchDevice && gameState === GameState.PLAYING && <DPad onMove={handlePlayerMove} />}
-            <footer className="mt-2 text-center text-gray-500 text-xs sm:text-sm hidden sm:block shrink-0">
-                <p>Usa las teclas [↑ ↓ ← →] o [W A S D] para moverte.</p>
-                <p>Muévete a las estanterías 🧱 para esconderte por 2 segundos.</p>
+            
+            {/* DPad flotante clásico solo para celulares en orientación horizontal (landscape) */}
+            {isTouchDevice && gameState === GameState.PLAYING && (
+                <div className="hidden landscape:block">
+                    <DPad onMove={handlePlayerMove} />
+                </div>
+            )}
+            
+            <footer className="mt-1 text-center text-gray-500 text-xs hidden sm:block shrink-0 select-none">
+                <p>Mover: Teclas [↑ ↓ ← →] / [W A S D]. Esconderse: Estanterías 🧱 (2s).</p>
             </footer>
+            
             <style>{`
                 html, body, #root {
                     height: 100%;
@@ -1296,6 +1388,50 @@ const App: React.FC = () => {
                     user-select: none;
                     -webkit-user-select: none;
                     -webkit-touch-callout: none;
+                    background-color: #020617;
+                }
+                .bg-radial-industrial {
+                    background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+                }
+                .pda-device {
+                    background: linear-gradient(135deg, #334155 0%, #1e293b 100%);
+                    border-color: #0f172a;
+                    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), inset 0 2px 4px rgba(255, 255, 255, 0.15);
+                }
+                .pda-key {
+                    background: linear-gradient(180deg, #475569 0%, #334155 100%);
+                    border: 1px solid #0f172a;
+                    box-shadow: 0 4px 0 #0f172a, inset 0 1px 0 rgba(255, 255, 255, 0.15);
+                    transition: transform 0.05s ease, box-shadow 0.05s ease;
+                }
+                .pda-key-up:active {
+                    transform: translate(-50%, 3px) !important;
+                    box-shadow: 0 1px 0 #0f172a, inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+                }
+                .pda-key-down:active {
+                    transform: translate(-50%, 3px) !important;
+                    box-shadow: 0 1px 0 #0f172a, inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+                }
+                .pda-key-left:active {
+                    transform: translate(0px, -50%) translate(0, 3px) !important;
+                    box-shadow: 0 1px 0 #0f172a, inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+                }
+                .pda-key-right:active {
+                    transform: translate(0px, -50%) translate(0, 3px) !important;
+                    box-shadow: 0 1px 0 #0f172a, inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+                }
+                .pda-key-sys:active {
+                    transform: translateY(3px) !important;
+                    box-shadow: 0 1px 0 #0f172a, inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+                }
+                .pda-key-yellow {
+                    background: linear-gradient(180deg, #fbbf24 0%, #d97706 100%);
+                    border: 1px solid #92400e;
+                    box-shadow: 0 4px 0 #92400e, inset 0 1px 0 rgba(255, 255, 255, 0.35);
+                }
+                .pda-key-yellow:active {
+                    transform: translate(-50%, -50%) translate(0, 3px) !important;
+                    box-shadow: 0 1px 0 #92400e, inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
                 }
                 .bg-checkered {
                     background-image: linear-gradient(45deg, #5a6678 25%, transparent 25%), linear-gradient(-45deg, #5a6678 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #5a6678 75%), linear-gradient(-45deg, transparent 75%, #5a6678 75%);
@@ -1338,6 +1474,6 @@ const App: React.FC = () => {
             `}</style>
         </main>
     );
-}
+};
 
 export default App;
